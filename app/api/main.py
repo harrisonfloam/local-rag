@@ -20,11 +20,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down...")
 
 
-app = FastAPI(title="Local RAG API", debug=settings.DEBUG, lifespan=lifespan)
+app = FastAPI(title="Local RAG API", debug=settings.debug, lifespan=lifespan)
 
-app.include_router(api_router, prefix=settings.API_PREFIX)
+app.include_router(api_router, prefix=settings.api_prefix)
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.api.main:app", host=settings.HOST, port=settings.PORT, reload=True)
+    uvicorn.run("app.api.main:app", host=settings.host, port=settings.port, reload=True)

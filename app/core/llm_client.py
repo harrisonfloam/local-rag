@@ -6,10 +6,10 @@ from app.settings import settings
 
 
 class LLMClient:
-    def __init__(self, model: str = settings.LLM_NAME):
+    def __init__(self, model: str = settings.llm_name):
         self.model = model
         self.client = openai.OpenAI(
-            base_url=settings.OLLAMA_URL,
+            base_url=settings.ollama_url,
             api_key="ollama",  # required, but unused
         )
 
@@ -22,10 +22,10 @@ class LLMClient:
 
 
 class AsyncLLMClient:
-    def __init__(self, model: str = settings.LLM_NAME):
+    def __init__(self, model: str = settings.llm_name):
         self.model = model
         self.client = openai.AsyncOpenAI(
-            base_url=settings.OLLAMA_URL,
+            base_url=settings.ollama_url,
             api_key="ollama",  # required, but unused
         )
 
