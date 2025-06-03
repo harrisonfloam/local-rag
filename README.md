@@ -25,7 +25,7 @@ Start the application, build the Docker image, and run tests quickly using comma
 make up
 ```
 
-#### Run with Docker Compose
+### Run with Docker Compose
 
 If you're more familiar with the [Docker CLI](https://docs.docker.com/reference/cli/docker/), the same functionality and more exposed via [docker-compose.yml](docker-compose.yml). To run the application:
 
