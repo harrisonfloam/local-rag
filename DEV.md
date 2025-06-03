@@ -13,7 +13,7 @@ Activate the development environment by installing [Docker Desktop](https://mark
 ##### With conda
 
 ```bash
-conda create -n nlpl python=3.12
-conda activate nlpl
+conda create -n local-rag python=3.12
+conda activate local-rag
 pip install -r requirements.txt
 ```

@@ -8,7 +8,7 @@ A Python project for simple, no strings attached local RAG.
 
 First, create a local clone of the repository:
 ```bash
-git clone https://github.com/harrisonfloam/natural-language-policy-learning
+git clone https://github.com/harrisonfloam/local-rag
 ```
 
 To recreate the development environment, follow on in [DEV.md](DEV.md).
