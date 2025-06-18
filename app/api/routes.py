@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.api.schemas import ChatRequest, ChatResponse, RetrieveRequest, RetrieveResponse
 from app.core.llm_client import AsyncLLMClient
 from app.core.prompts import RAG_USER_PROMPT
 from app.settings import settings
@@ -11,49 +12,6 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# Request models
-class ChatRequest(BaseModel):
-    messages: List[Dict[str, str]] = Field(..., description="List of chat messages")
-    system_prompt: str = Field(..., description="System prompt for the chat")
-    model: str = Field(..., description="LLM model to use")
-    temperature: float = Field(
-        ..., ge=0.0, le=2.0, description="Temperature for response generation"
-    )
-    top_k: int = Field(..., ge=1, description="Number of documents to retrieve")
-
-
-class RetrieveRequest(BaseModel):
-    query: str = Field(..., description="Search query")
-    top_k: int = Field(5, ge=1, le=50, description="Number of results to return")
-
-
-class DocumentChunk(BaseModel):
-    content: str = Field(..., description="The text content of the document chunk")
-    score: float = Field(..., description="Relevance score (0.0 to 1.0)")
-    document_id: str = Field(..., description="ID of the source document")
-    document_title: str = Field(
-        ..., description="Title/filename of the source document"
-    )
-    chunk_index: int = Field(..., description="Index of this chunk within the document")
-
-    def __str__(self) -> str:
-        return f"""Source: {self.document_title}\nScore: {self.score:.2f})\n{self.content}"""
-
-
-class ChatResponse(BaseModel):
-    response: str = Field(..., description="The LLM's response")
-    sources: List[DocumentChunk] = Field(
-        default=[], description="Retrieved document sources"
-    )
-    model_used: str = Field(..., description="The LLM model that was used")
-    temperature_used: float = Field(..., description="The temperature setting used")
-
-
-class RetrieveResponse(BaseModel):
-    query: str = Field(..., description="The original search query")
-    results: List[DocumentChunk] = Field(..., description="Retrieved document chunks")
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)
@@ -93,10 +51,10 @@ async def chat(request: ChatRequest):
             temperature=request.temperature,
         )
         return ChatResponse(
-            response=response["choices"][0]["message"]["content"],
+            response=response.choices[0].message.content,
             sources=retrieve_response.results,
-            model_used=request.model,
-            temperature_used=request.temperature,
+            model=request.model,
+            temperature=request.temperature,
         )
     except Exception as e:
         logger.error(f"Error during chat: {e}")
@@ -122,6 +80,7 @@ def ingest_documents():
     # NOTE:
     # - this endpoint should get hit when /chat does - but if the docs already exist, it doesnt reingest
     # - or just auto ingest and make an endpoint that gives us the status?
+    # - OR: strictly only ingest docs via this endpoint, track which docs are uploaded on frontend, /chat only uses whats in the vectorstore
     pass
 
 
