@@ -1,50 +1,74 @@
 import json
 import logging
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 import openai
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionMessage,
+    ChatCompletionMessageParam,
+)
 
 from app.settings import settings
+from app.utils.callbacks import CallbackMeta, with_callbacks
 
 logger = logging.getLogger(__name__)
 
+ChatMessage = Dict[str, Any]
 
-class LLMClient:
+
+class BaseLLMClient(ABC, metaclass=CallbackMeta):
+    def __init__(self, log_level: str = settings.log_level, *args, **kwargs):
+        logger.setLevel(log_level.upper())
+        logger.debug(f"{self.__class__.__name__} initialized.")
+
+    @with_callbacks
+    @abstractmethod
+    def chat(self, *args, **kwargs):
+        pass
+
+    def _pre_chat(self, *args, **kwargs):
+        payload = {**kwargs, **dict(enumerate(args))}
+        logger.debug(f"LLM request:\n{json.dumps(payload, indent=2, default=str)}")
+
+    def _post_chat(self, result, *args, **kwargs):
+        logger.debug(f"LLM response:\n{json.dumps(result, indent=2, default=str)}")
+        return result
+
+
+class LLMClient(BaseLLMClient):
     def __init__(
         self, ollama_url: str = settings.ollama_url, log_level: str = settings.log_level
     ):
+        super().__init__(log_level=log_level)
         self.client = openai.OpenAI(
             base_url=ollama_url,
             api_key="ollama",  # required, but unused
         )
-        logger.setLevel(log_level.upper())
-        logger.debug("LLMClient initialized.")
 
     def chat(
         self,
-        messages: List[Dict[str, Any]],
+        messages: List[ChatMessage],
         model: str = settings.model_name,
         temperature: float = settings.temperature,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> ChatCompletion:
         payload = {
             "model": model,
             "messages": messages,  # type: ignore
             "temperature": temperature,
             **kwargs,
         }
-        logger.debug(
-            f"LLM request payload:\n{json.dumps(payload, indent=2, default=str)}"
-        )
-        response = self.client.chat.completions.create(**payload)
-        logger.debug(f"LLM response:\n{json.dumps(response, indent=2, default=str)}")
+        response = self.client.chat.completions.create(stream=False, **payload)
         return response
 
 
-class AsyncLLMClient:
+class AsyncLLMClient(BaseLLMClient):
     def __init__(
         self, ollama_url: str = settings.ollama_url, log_level: str = settings.log_level
     ):
+        super().__init__(log_level=log_level)
         self.client = openai.AsyncOpenAI(
             base_url=ollama_url,
             api_key="ollama",  # required, but unused
@@ -53,20 +77,19 @@ class AsyncLLMClient:
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
+        messages: List[ChatMessage],
         model: str = settings.model_name,
         temperature: float = settings.temperature,
         **kwargs,
-    ) -> Dict[str, Any]:
-        payload = {
-            "model": model,
-            "messages": messages,  # type: ignore
-            "temperature": temperature,
+    ) -> ChatCompletion:
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,  # type: ignore
+            temperature=temperature,
+            stream=False,
             **kwargs,
-        }
-        logger.debug(
-            f"LLM request payload:\n{json.dumps(payload, indent=2, default=str)}"
         )
-        response = await self.client.chat.completions.create(**payload)
-        logger.debug(f"LLM response:\n{json.dumps(response, indent=2, default=str)}")
         return response
+
+
+# TODO: structured clients with Instructor
