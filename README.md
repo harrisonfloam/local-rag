@@ -1,6 +1,6 @@
 # local-rag
 
-A Python project for simple, no strings attached local RAG.
+A Python project for simple, full customizable local RAG - with no strings attached.
 
 # Getting started
 
