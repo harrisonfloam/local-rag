@@ -25,7 +25,7 @@ class BaseLLMClient(ABC, metaclass=CallbackMeta):
 
     @with_callbacks
     @abstractmethod
-    def chat(self, *args, **kwargs):
+    async def chat(self, *args, **kwargs) -> ChatCompletion:
         pass
 
     def _pre_chat(self, *args, **kwargs):
@@ -39,31 +39,31 @@ class BaseLLMClient(ABC, metaclass=CallbackMeta):
         return result
 
 
-class LLMClient(BaseLLMClient):
-    def __init__(
-        self, ollama_url: str = settings.ollama_url, log_level: str = settings.log_level
-    ):
-        super().__init__(log_level=log_level)
-        self.client = openai.OpenAI(
-            base_url=ollama_url,
-            api_key="ollama",  # required, but unused
-        )
+# class LLMClient(BaseLLMClient):
+#     def __init__(
+#         self, ollama_url: str = settings.ollama_url, log_level: str = settings.log_level
+#     ):
+#         super().__init__(log_level=log_level)
+#         self.client = openai.OpenAI(
+#             base_url=ollama_url,
+#             api_key="ollama",  # required, but unused
+#         )
 
-    def chat(
-        self,
-        messages: List[ChatMessage],
-        model: str = settings.model_name,
-        temperature: float = settings.temperature,
-        **kwargs,
-    ) -> ChatCompletion:
-        payload = {
-            "model": model,
-            "messages": messages,  # type: ignore
-            "temperature": temperature,
-            **kwargs,
-        }
-        response = self.client.chat.completions.create(stream=False, **payload)
-        return response
+#     def chat(
+#         self,
+#         messages: List[ChatMessage],
+#         model: str = settings.model_name,
+#         temperature: float = settings.temperature,
+#         **kwargs,
+#     ) -> ChatCompletion:
+#         payload = {
+#             "model": model,
+#             "messages": messages,  # type: ignore
+#             "temperature": temperature,
+#             **kwargs,
+#         }
+#         response = self.client.chat.completions.create(stream=False, **payload)
+#         return response
 
 
 class AsyncLLMClient(BaseLLMClient):
