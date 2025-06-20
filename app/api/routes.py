@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.api.schemas import ChatRequest, ChatResponse, RetrieveRequest, RetrieveResponse
-from app.core.llm_client import AsyncLLMClient
+from app.core.llm_client import AsyncLLMClient, MockAsyncLLMClient
 from app.core.prompts import RAG_USER_PROMPT
 from app.settings import settings
 
@@ -23,23 +23,35 @@ async def health_check():
 async def chat(request: ChatRequest):
     """Chat with the RAG system."""
     # TODO: remake this with streaming
-    llm = AsyncLLMClient()
+    if request.mock_llm:
+        llm = MockAsyncLLMClient()
+    else:
+        llm = AsyncLLMClient()
 
     # Retrieve context
-    query = request.messages[-1]["content"]
-    retrieve_request = RetrieveRequest(query=query, top_k=request.top_k)
-    retrieve_response = await retrieve(retrieve_request)
-    retrieved_docs = "\n\n".join([str(doc) for doc in retrieve_response.results])
+    if request.use_rag:
+        query = request.messages[-1]["content"]
+        retrieve_request = RetrieveRequest(query=query, top_k=request.top_k)
+        retrieve_response = await retrieve(retrieve_request)
+        retrieved_docs = "\n\n".join([str(doc) for doc in retrieve_response.results])
+
+        # Build LLM payload
+        query_with_context = RAG_USER_PROMPT.format(
+            context=retrieved_docs, question=query
+        )
+        user_message = {"role": "user", "content": query_with_context}
+    else:
+        # Build message without context
+        user_message = request.messages[-1]
 
     # Process conversation history
     # TODO: conversation memory scheme
     previous_messages = request.messages[:-1]
 
-    # Build LLM payload
-    query_with_context = RAG_USER_PROMPT.format(context=retrieved_docs, question=query)
-    user_message = {"role": "user", "content": query_with_context}
     messages = (
-        [{"role": "system", "content": request.system_prompt}]
+        [
+            {"role": "system", "content": request.system_prompt}
+        ]  # TODO: system prompt at the top? or before latest message?
         + previous_messages
         + [user_message]
     )
@@ -52,7 +64,7 @@ async def chat(request: ChatRequest):
         )
         return ChatResponse(
             response=response.choices[0].message.content,
-            sources=retrieve_response.results,
+            sources=retrieve_response.results if request.use_rag else [],
             model=request.model,
             temperature=request.temperature,
         )

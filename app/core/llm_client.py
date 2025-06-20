@@ -7,8 +7,8 @@ import openai
 from openai.types.chat import (
     ChatCompletion,
     ChatCompletionMessage,
-    ChatCompletionMessageParam,
 )
+from openai.types.chat.chat_completion import Choice
 
 from app.settings import settings
 from app.utils.callbacks import CallbackMeta, with_callbacks
@@ -33,7 +33,9 @@ class BaseLLMClient(ABC, metaclass=CallbackMeta):
         logger.debug(f"LLM request:\n{json.dumps(payload, indent=2, default=str)}")
 
     def _post_chat(self, result, *args, **kwargs):
-        logger.debug(f"LLM response:\n{json.dumps(result, indent=2, default=str)}")
+        logger.debug(
+            f"LLM response:\n{json.dumps(result.model_dump(), indent=2, default=str)}"
+        )
         return result
 
 
@@ -73,7 +75,6 @@ class AsyncLLMClient(BaseLLMClient):
             base_url=ollama_url,
             api_key="ollama",  # required, but unused
         )
-        logger.setLevel(log_level.upper())
 
     async def chat(
         self,
@@ -88,6 +89,38 @@ class AsyncLLMClient(BaseLLMClient):
             temperature=temperature,
             stream=False,
             **kwargs,
+        )
+        return response
+
+
+class MockAsyncLLMClient(BaseLLMClient):
+    def __init__(
+        self, ollama_url: str = settings.ollama_url, log_level: str = settings.log_level
+    ):
+        super().__init__(log_level=log_level)
+
+    async def chat(
+        self,
+        messages: List[ChatMessage],
+        model: str = settings.model_name,
+        temperature: float = settings.temperature,
+        **kwargs,
+    ) -> ChatCompletion:
+        response = ChatCompletion(
+            id="mock_id",
+            object="chat.completion",
+            created=1234567890,
+            model=model,
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        content="This is a mock response.",
+                    ),
+                    finish_reason="stop",
+                )
+            ],
         )
         return response
 
