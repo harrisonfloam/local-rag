@@ -14,4 +14,22 @@ services:
     volumes:
       - ./app:/local-rag/app
       - ./ui:/local-rag/ui
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
     command: ["bash", "-c", "python -m app.api.main & python -m streamlit run ui/streamlit_app.py"]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: 
+      - "11434:11434"
+    volumes:
+      - ${OLLAMA_MODEL_PATH:-~/.ollama}:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test:  "bash -c 'cat < /dev/null > /dev/tcp/localhost/11434'"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
