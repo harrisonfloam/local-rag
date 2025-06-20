@@ -1,0 +1,17 @@
+[theme]
+base = "dark"
+primaryColor = "gold"
+font = "serif"
+
+[server]
+maxUploadSize = 10000
+fileWatcherType = "poll"
+
+[client]
+toolbarMode = "minimal"
+
+[global]
+disableWidgetStateDuplicationWarning = true
+
+[browser]
+gatherUsageStats = false
