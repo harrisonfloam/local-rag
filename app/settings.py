@@ -10,23 +10,31 @@ class Settings(BaseSettings):
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000
-    reload: bool = False
+    reload: bool = True
+    httpx_timeout: int = 30
+    api_prefix: str = "/api"
+
+    @property
+    def api_url(self) -> str:
+        return f"http://{self.host}:{self.port}{self.api_prefix}"
 
     # LLM settings
     ollama_url: str = "http://ollama:11434/v1"
-    model_name: str = "mistral:latest"
+    model_name: str = "llama3.2:1b"
     temperature: float = 0.7
     mock_llm: bool = False
+    # TODO: conversation memory settings
 
+    # RAG Settings
+    # TODO: vectorstore settings, chunking, etc
+    use_rag: bool = True
+    top_k: int = 5
     vector_db_url: str = ""
 
     documents_path: str = "./data/documents"
-    api_prefix: str = "/api"
-
-    llm_name: str = "mistral:latest"
 
     # Logging settings
-    log_level: str = "INFO"
+    log_level: str = "DEBUG"
     dependency_log_level: str = "WARNING"
 
     @property
@@ -67,6 +75,16 @@ class Settings(BaseSettings):
                     "propagate": False,
                 },
                 "httpcore": {
+                    "level": self.dependency_log_level,
+                    "handlers": ["console"],
+                    "propagate": False,
+                },
+                "uvicorn.access": {
+                    "level": self.dependency_log_level,
+                    "handlers": ["console"],
+                    "propagate": False,
+                },
+                "watchfiles": {
                     "level": self.dependency_log_level,
                     "handlers": ["console"],
                     "propagate": False,
