@@ -10,6 +10,17 @@ def main():
     st.title("local-rag")
 
     with st.sidebar:
+        # Fetch available models
+        if "available_models" not in st.session_state:
+            try:
+                with httpx.Client(timeout=settings.httpx_timeout) as client:
+                    response = client.get(f"{settings.api_url}/models")
+                    response.raise_for_status()
+                    st.session_state.available_models = response.json()["models"]
+            except Exception as e:
+                st.warning(f"Could not fetch models: {e}")
+                st.session_state.available_models = [settings.model_name]
+
         file_uploader = st.file_uploader(
             "Upload documents",
             type=["pdf", "txt", "docx", "md"],
@@ -17,7 +28,12 @@ def main():
         )
         st.markdown("---")
         model = st.selectbox(
-            "Model", key="model", options=[settings.model_name], index=0
+            "Model",
+            key="model",
+            options=st.session_state.available_models,
+            index=0
+            if settings.model_name not in st.session_state.available_models
+            else st.session_state.available_models.index(settings.model_name),
         )
         temperature = st.number_input(
             "Temperature",

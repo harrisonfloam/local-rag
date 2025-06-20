@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Dict, List, Optional
 
@@ -23,12 +24,16 @@ async def health_check():
 async def chat(request: ChatRequest):
     """Chat with the RAG system."""
     # TODO: remake this with streaming
+    logger.debug(
+        f"Chat request:\n{json.dumps(request.model_dump(), indent=2, default=str)}"
+    )
     if request.mock_llm:
         llm = MockAsyncLLMClient()
     else:
         llm = AsyncLLMClient()
 
     # Retrieve context
+    retrieve_response = None
     if request.use_rag:
         query = request.messages[-1]["content"]
         retrieve_request = RetrieveRequest(query=query, top_k=request.top_k)
@@ -64,7 +69,7 @@ async def chat(request: ChatRequest):
         )
         return ChatResponse(
             response=response.choices[0].message.content,
-            sources=retrieve_response.results if request.use_rag else [],
+            sources=retrieve_response.results if retrieve_response else [],
             model=request.model,
             temperature=request.temperature,
         )
@@ -100,3 +105,18 @@ def ingest_documents():
 async def list_documents():
     """List all documents in the vectorstore."""
     pass
+
+
+@router.get("/models")
+async def list_models():
+    """List available models."""
+    logger.info("Fetching available models.")
+    try:
+        llm = AsyncLLMClient()
+        models = await llm.client.models.list()
+        available_models = [model.id for model in models.data]
+        logger.debug(f"Available models: {available_models}")
+        return {"models": available_models}
+    except Exception as e:
+        logger.error(f"Failed to fetch models: {e}")
+        return {"models": [settings.model_name]}
