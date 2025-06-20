@@ -1,0 +1,17 @@
+name: local-rag
+
+services:
+  app:
+    build: .
+    image: local-rag:latest
+    ports:
+      - "8501:8501"
+    environment:
+      - APP_LOG_LEVEL=DEBUG
+      - APP_MOCK_LLM=true
+      - APP_USE_RAG=false
+      - APP_RELOAD=true
+    volumes:
+      - ./app:/local-rag/app
+      - ./ui:/local-rag/ui
+    command: ["bash", "-c", "python -m app.api.main & python -m streamlit run ui/streamlit_app.py"]

@@ -1,0 +1,9 @@
+.dev/
+.notebooks/
+
+.vscode/
+.git
+*pyc
+*__pycache__*
+.pytest_cache/
+.env
