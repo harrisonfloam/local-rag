@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 from abc import ABCMeta
 
@@ -33,15 +34,31 @@ def with_callbacks(method):
     post_cb = f"_post_{method_name}"
     setattr(method, "_with_callbacks", True)
 
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        if hasattr(self, pre_cb):
-            getattr(self, pre_cb)(*args, **kwargs)
-        result = method(self, *args, **kwargs)
-        if hasattr(self, post_cb):
-            new_result = getattr(self, post_cb)(result, *args, **kwargs)
-            if new_result is not None:
-                result = new_result
-        return result
+    if asyncio.iscoroutinefunction(method):
 
-    return wrapper
+        @functools.wraps(method)
+        async def async_wrapper(self, *args, **kwargs):
+            if hasattr(self, pre_cb):
+                getattr(self, pre_cb)(*args, **kwargs)
+            result = await method(self, *args, **kwargs)  # ← await the method
+            if hasattr(self, post_cb):
+                new_result = getattr(self, post_cb)(result, *args, **kwargs)
+                if new_result is not None:
+                    result = new_result
+            return result
+
+        return async_wrapper
+    else:
+
+        @functools.wraps(method)
+        def sync_wrapper(self, *args, **kwargs):
+            if hasattr(self, pre_cb):
+                getattr(self, pre_cb)(*args, **kwargs)
+            result = method(self, *args, **kwargs)
+            if hasattr(self, post_cb):
+                new_result = getattr(self, post_cb)(result, *args, **kwargs)
+                if new_result is not None:
+                    result = new_result
+            return result
+
+        return sync_wrapper
