@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8000
-    reload: bool = True
+    reload: bool = False
     httpx_timeout: int = 30
     api_prefix: str = "/api"
 
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     documents_path: str = "./data/documents"
 
     # Logging settings
-    log_level: str = "DEBUG"
+    log_level: str = "INFO"
     dependency_log_level: str = "WARNING"
 
     @property
