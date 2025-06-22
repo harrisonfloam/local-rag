@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.middleware import log_requests
 from app.api.routes import router
 from app.settings import settings
 from app.utils.utils import init_logging
@@ -21,6 +22,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Local RAG API", debug=settings.debug, lifespan=lifespan)
+
+app.middleware("http")(log_requests)
 
 app.include_router(router, prefix=settings.api_prefix)
 

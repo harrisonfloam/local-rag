@@ -24,13 +24,10 @@ async def health_check():
 async def chat(request: ChatRequest):
     """Chat with the RAG system."""
     # TODO: remake this with streaming
-    logger.debug(
-        f"Chat request:\n{json.dumps(request.model_dump(), indent=2, default=str)}"
-    )
     if request.mock_llm:
-        llm = MockAsyncLLMClient()
+        llm = MockAsyncLLMClient(log_level="INFO")
     else:
-        llm = AsyncLLMClient()
+        llm = AsyncLLMClient(log_level="INFO")
 
     # Retrieve context
     retrieve_response = None
@@ -61,21 +58,22 @@ async def chat(request: ChatRequest):
         + [user_message]
     )
 
-    try:
-        response = await llm.chat(
-            messages=messages,
-            model=request.model,
-            temperature=request.temperature,
-        )
-        return ChatResponse(
-            response=response.choices[0].message.content,
-            sources=retrieve_response.results if retrieve_response else [],
-            model=request.model,
-            temperature=request.temperature,
-        )
-    except Exception as e:
-        logger.error(f"Error during chat: {e}")
-        raise HTTPException(status_code=500, detail="Failed to process chat")
+    response = await llm.chat(
+        messages=messages,
+        model=request.model,
+        temperature=request.temperature,
+    )
+
+    logger.debug(
+        f"Chat response:\n{json.dumps(response.model_dump(), indent=2, default=str)}"
+    )
+
+    return ChatResponse(
+        response=response.choices[0].message.content,
+        sources=retrieve_response.results if retrieve_response else [],
+        model=request.model,
+        temperature=request.temperature,
+    )
 
 
 @router.post("/retrieve")
@@ -110,13 +108,8 @@ async def list_documents():
 @router.get("/models")
 async def list_models():
     """List available models."""
-    logger.info("Fetching available models.")
-    try:
-        llm = AsyncLLMClient()
-        models = await llm.client.models.list()
-        available_models = [model.id for model in models.data]
-        logger.debug(f"Available models: {available_models}")
-        return {"models": available_models}
-    except Exception as e:
-        logger.error(f"Failed to fetch models: {e}")
-        return {"models": [settings.model_name]}
+    llm = AsyncLLMClient()
+    models = await llm.client.models.list()
+    available_models = [model.id for model in models.data]
+    logger.debug(f"Available models: {available_models}")
+    return {"models": available_models}
