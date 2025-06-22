@@ -30,40 +30,14 @@ class BaseLLMClient(ABC, metaclass=CallbackMeta):
 
     def _pre_chat(self, *args, **kwargs):
         payload = {**kwargs, **dict(enumerate(args))}
-        logger.debug(f"LLM request:\n{json.dumps(payload, indent=2, default=str)}")
+        logger.debug(f"Chat request:\n{json.dumps(payload, indent=2, default=str)}")
 
-    def _post_chat(self, result, *args, **kwargs):
+    def _post_chat(self, result, duration, *args, **kwargs):
         logger.debug(
-            f"LLM response:\n{json.dumps(result.model_dump(), indent=2, default=str)}"
+            f"Chat response:\n{json.dumps(result.model_dump(), indent=2, default=str)}"
         )
+        logger.info(f"Chat request completed in {duration:.4f}s")
         return result
-
-
-# class LLMClient(BaseLLMClient):
-#     def __init__(
-#         self, ollama_url: str = settings.ollama_url, log_level: str = settings.log_level
-#     ):
-#         super().__init__(log_level=log_level)
-#         self.client = openai.OpenAI(
-#             base_url=ollama_url,
-#             api_key="ollama",  # required, but unused
-#         )
-
-#     def chat(
-#         self,
-#         messages: List[ChatMessage],
-#         model: str = settings.model_name,
-#         temperature: float = settings.temperature,
-#         **kwargs,
-#     ) -> ChatCompletion:
-#         payload = {
-#             "model": model,
-#             "messages": messages,  # type: ignore
-#             "temperature": temperature,
-#             **kwargs,
-#         }
-#         response = self.client.chat.completions.create(stream=False, **payload)
-#         return response
 
 
 class AsyncLLMClient(BaseLLMClient):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import time
 from abc import ABCMeta
 
 
@@ -40,9 +41,11 @@ def with_callbacks(method):
         async def async_wrapper(self, *args, **kwargs):
             if hasattr(self, pre_cb):
                 getattr(self, pre_cb)(*args, **kwargs)
-            result = await method(self, *args, **kwargs)  # ← await the method
+            start_time = time.time()
+            result = await method(self, *args, **kwargs)
+            duration = time.time() - start_time
             if hasattr(self, post_cb):
-                new_result = getattr(self, post_cb)(result, *args, **kwargs)
+                new_result = getattr(self, post_cb)(result, duration, *args, **kwargs)
                 if new_result is not None:
                     result = new_result
             return result
@@ -54,9 +57,11 @@ def with_callbacks(method):
         def sync_wrapper(self, *args, **kwargs):
             if hasattr(self, pre_cb):
                 getattr(self, pre_cb)(*args, **kwargs)
+            start_time = time.time()
             result = method(self, *args, **kwargs)
+            duration = time.time() - start_time
             if hasattr(self, post_cb):
-                new_result = getattr(self, post_cb)(result, *args, **kwargs)
+                new_result = getattr(self, post_cb)(result, duration, *args, **kwargs)
                 if new_result is not None:
                     result = new_result
             return result
