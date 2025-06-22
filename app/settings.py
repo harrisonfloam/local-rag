@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         return f"http://{self.host}:{self.port}{self.api_prefix}"
 
     # LLM settings
-    ollama_url: str = "http://ollama:11434/v1"
+    ollama_url: str = "http://localhost:11434/v1"
     model_name: str = "llama3.2:1b"
     temperature: float = 0.7
     mock_llm: bool = False
@@ -44,7 +44,8 @@ class Settings(BaseSettings):
             "disable_existing_loggers": False,
             "formatters": {
                 "standard": {
-                    "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+                    "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                    "datefmt": "%Y-%m-%d %H:%M",
                 }
             },
             "handlers": {
