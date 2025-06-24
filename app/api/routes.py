@@ -72,7 +72,8 @@ async def chat(request: ChatRequest):
         response=response.choices[0].message.content,
         sources=retrieve_response.results if retrieve_response else [],
         model=request.model,
-        temperature=request.temperature,
+        finish_reason=response.choices[0].finish_reason,
+        usage=response.usage.model_dump() if response.usage else None,
     )
 
 

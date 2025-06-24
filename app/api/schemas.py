@@ -46,7 +46,10 @@ class ChatResponse(BaseModel):
         default=[], description="Retrieved document sources"
     )
     model: str = Field(..., description="The LLM model that was used")
-    temperature: float = Field(..., description="The temperature setting used")
+    finish_reason: Optional[str] = Field(None, description="Response finish reason")
+    usage: Optional[Dict[str, int]] = Field(
+        None, description="Usage statistics if available"
+    )
 
 
 class RetrieveResponse(BaseModel):
