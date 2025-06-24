@@ -11,15 +11,22 @@ def main():
 
     with st.sidebar:
         # Fetch available models
-        if "available_models" not in st.session_state:
+        if "model_info" not in st.session_state:
             try:
                 with httpx.Client(timeout=settings.httpx_timeout) as client:
                     response = client.get(f"{settings.api_url}/models")
                     response.raise_for_status()
-                    st.session_state.available_models = response.json()["models"]
-            except Exception as e:
-                st.warning(f"Could not fetch models: {e}")
-                st.session_state.available_models = [settings.model_name]
+                    model_info = response.json()
+            except Exception:
+                st.warning("Error fetching models.")
+                model_info = {
+                    "models": [settings.model_name, settings.embedding_model_name],
+                    "completion_models": [settings.model_name],
+                    "embedding_models": [settings.embedding_model_name],
+                }
+            st.session_state.model_info = model_info
+            st.session_state.completion_models = model_info.get("completion_models", [])
+            st.session_state.embedding_models = model_info.get("embedding_models", [])
 
         file_uploader = st.file_uploader(
             "Upload documents",
@@ -27,13 +34,21 @@ def main():
             accept_multiple_files=True,
         )
         st.markdown("---")
-        model = st.selectbox(
-            "Model",
-            key="model",
-            options=st.session_state.available_models,
+        completion_model = st.selectbox(
+            "Completion model",
+            key="completion_model",
+            options=st.session_state.completion_models,
             index=0
-            if settings.model_name not in st.session_state.available_models
-            else st.session_state.available_models.index(settings.model_name),
+            if settings.model_name not in st.session_state.completion_models
+            else st.session_state.completion_models.index(settings.model_name),
+        )
+        embedding_model = st.selectbox(
+            "Embedding model",
+            key="embedding_model",
+            options=st.session_state.embedding_models,
+            index=0
+            if settings.embedding_model_name not in st.session_state.embedding_models
+            else st.session_state.embedding_models.index(settings.embedding_model_name),
         )
         temperature = st.number_input(
             "Temperature",
