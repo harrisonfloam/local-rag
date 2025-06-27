@@ -1,9 +1,8 @@
 import json
 import logging
-from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+import httpx
+from fastapi import APIRouter, status
 
 from app.api.schemas import ChatRequest, ChatResponse, RetrieveRequest, RetrieveResponse
 from app.core.llm_client import AsyncLLMClient, MockAsyncLLMClient

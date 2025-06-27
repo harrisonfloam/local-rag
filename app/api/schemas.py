@@ -1,9 +1,9 @@
 # Request models
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.core.ingestor import DocumentChunk
+from app.core.ingestor import RetrievedDocumentChunk
 from app.core.prompts import RAG_SYSTEM_PROMPT
 from app.settings import settings
 
@@ -42,16 +42,18 @@ class RetrieveRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: Optional[str] = Field(..., description="The LLM's response")
-    sources: List[DocumentChunk] = Field(
+    sources: List[RetrievedDocumentChunk] = Field(
         default=[], description="Retrieved document sources"
     )
     model: str = Field(..., description="The LLM model that was used")
     finish_reason: Optional[str] = Field(None, description="Response finish reason")
-    usage: Optional[Dict[str, int]] = Field(
+    usage: Optional[Dict[str, Optional[int]]] = Field(
         None, description="Usage statistics if available"
     )
 
 
 class RetrieveResponse(BaseModel):
     query: str = Field(..., description="The original search query")
-    results: List[DocumentChunk] = Field(..., description="Retrieved document chunks")
+    results: List[RetrievedDocumentChunk] = Field(
+        ..., description="Retrieved document chunks"
+    )
