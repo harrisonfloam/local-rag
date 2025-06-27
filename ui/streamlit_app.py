@@ -90,22 +90,25 @@ def main():
             if settings.embedding_model_name not in st.session_state.embedding_models
             else st.session_state.embedding_models.index(settings.embedding_model_name),
         )
-        temperature = st.number_input(
-            "Temperature",
-            key="temperature",
-            min_value=0.0,
-            max_value=2.0,
-            value=settings.temperature,
-            step=0.05,
-        )
-        top_k = st.number_input(
-            "Top K",
-            key="top_k",
-            min_value=1,
-            max_value=50,
-            value=settings.top_k,
-            step=1,
-        )
+        col1, col2 = st.columns(2)
+        with col1:
+            temperature = st.number_input(
+                "Temperature",
+                key="temperature",
+                min_value=0.0,
+                max_value=2.0,
+                value=settings.temperature,
+                step=0.05,
+            )
+        with col2:
+            top_k = st.number_input(
+                "Top K",
+                key="top_k",
+                min_value=1,
+                max_value=50,
+                value=settings.top_k,
+                step=1,
+            )
         system_prompt = st.text_area(
             "System Prompt",
             key="system_prompt",
@@ -113,21 +116,15 @@ def main():
             height=90,
             help="System prompt to guide the LLM's behavior",
         )
-        use_rag = st.checkbox(
-            "Use RAG",
-            key="use_rag",
-            value=settings.use_rag,
-            help="Use RAG context for the chat",
-        )
-        mock_llm = st.checkbox(
-            "Mock LLM",
-            key="mock_llm",
-            value=settings.mock_llm,
-            help="Use a mock LLM for testing purposes",
-        )
 
     # Request keys
-    CHAT_REQUEST_KEYS = ["model", "temperature", "top_k", "use_rag", "mock_llm"]
+    CHAT_REQUEST_KEYS = [
+        "system_prompt",
+        "temperature",
+        "top_k",
+        "use_rag",
+        "mock_llm",
+    ]
     # TODO: ingest request keys
 
     # Clear chat
@@ -136,11 +133,15 @@ def main():
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    chat_container = st.container(height=500)
+
+    chat_container = st.container(height=500, key="chat_container")
     with chat_container:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+    # Model label
+    # TODO: add more details to chat messages, create custom ChatMessage
+    st.caption(f"Model: {st.session_state.completion_model}")
 
     if prompt := st.chat_input("Start a new chat..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -157,6 +158,7 @@ def main():
                                 f"{settings.api_url}/chat",
                                 json={
                                     "messages": st.session_state.messages,
+                                    "model": st.session_state.completion_model,
                                     **{
                                         key: st.session_state[key]
                                         for key in CHAT_REQUEST_KEYS
@@ -164,8 +166,10 @@ def main():
                                 },
                             )
                             chat_response.raise_for_status()
+                        # TODO: handle truncation check
+                        response_data = chat_response.json()
+                        llm_message = response_data["response"]
 
-                        llm_message = chat_response.json()["response"]
                         st.markdown(llm_message)
 
                         st.session_state.messages.append(
