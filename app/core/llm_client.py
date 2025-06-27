@@ -34,9 +34,8 @@ class BaseLLMClient(ABC, metaclass=CallbackMeta):
 
     def _post_chat(self, result, duration, *args, **kwargs):
         logger.debug(
-            f"Chat response:\n{json.dumps(result.model_dump(), indent=2, default=str)}"
+            f"Chat response in {duration:.4f}s:\n{json.dumps(result.model_dump(), indent=2, default=str)}"
         )
-        logger.info(f"Chat request completed in {duration:.4f}s")
         return result
 
 
@@ -84,13 +83,15 @@ class MockAsyncLLMClient(BaseLLMClient):
             id="mock_id",
             object="chat.completion",
             created=1234567890,
-            model=model,
+            model="mock-llm",
             choices=[
                 Choice(
                     index=0,
                     message=ChatCompletionMessage(
                         role="assistant",
-                        content="This is a mock response.",
+                        content=messages[-1]["content"]
+                        if messages
+                        else "This is a mock response.",
                     ),
                     finish_reason="stop",
                 )
