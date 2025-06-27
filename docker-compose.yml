@@ -9,6 +9,7 @@ services:
     environment:
       - APP_OLLAMA_URL=http://ollama:11434/v1
       # Dev settings
+      - APP_DEV_MODE=true
       - APP_DEBUG=true
       - APP_LOG_LEVEL=DEBUG
       - APP_MOCK_LLM=true

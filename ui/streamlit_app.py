@@ -34,12 +34,52 @@ def main():
             accept_multiple_files=True,
         )
         st.markdown("---")
+        # Check boxes
+        col1, col2 = st.columns(2)
+        with col1:
+            use_rag = st.checkbox(
+                "Use RAG",
+                key="use_rag",
+                value=settings.use_rag,
+                # help="Use RAG context for the chat",
+            )
+        with col2:
+            dev_mode = st.checkbox(
+                "Dev Mode",
+                key="dev_mode",
+                value=settings.dev_mode,
+                help="Enable dev mode for additional options",
+            )
+        # Dev mode options
+        if st.session_state.dev_mode:
+            col1, col2 = st.columns(2)
+            with col1:
+                mock_llm = st.checkbox(
+                    "Mock LLM",
+                    key="mock_llm",
+                    value=settings.mock_llm,
+                    # help="Use a mock LLM for testing purposes",
+                )
+            with col2:
+                mock_rag_response = st.checkbox(
+                    "Mock RAG Response",
+                    key="mock_rag_response",
+                    value=settings.mock_rag_response,
+                    # help="Use a mock RAG response for testing purposes",
+                )
+        st.markdown("---")
+        # Dropdowns and inputs
         completion_model = st.selectbox(
             "Completion model",
             key="completion_model",
-            options=st.session_state.completion_models,
+            options=st.session_state.completion_models
+            if not st.session_state.mock_llm
+            else ["mock-llm"],
             index=0
-            if settings.model_name not in st.session_state.completion_models
+            if (
+                settings.model_name not in st.session_state.completion_models
+                or settings.mock_llm
+            )
             else st.session_state.completion_models.index(settings.model_name),
         )
         embedding_model = st.selectbox(

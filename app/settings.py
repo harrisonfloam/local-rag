@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434/v1"
     model_name: str = "llama3.2:1b"
     temperature: float = 0.7
-    mock_llm: bool = False
+    mock_llm: bool = False  # DEV: Use a mock LLM for testing purposes
     # TODO: conversation memory settings
 
     # RAG Settings
@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     vector_db_url: str = ""
 
     documents_path: str = "./data/documents"
+    mock_rag_response: bool = False  # DEV: Use a mock RAG response for testing
+    mock_documents: bool = False  # DEV: Use mock documents for testing
+
+    # Frontend settings
+    dev_mode: bool = False  # Enable additional options in the UI
+    use_rag: bool = True  # Use RAG context in the chat
+
+    @property
+    def chroma_url(self) -> str:
+        return f"http://{self.chroma_host}:{self.chroma_port}"
 
     # Logging settings
     log_level: str = "INFO"
