@@ -10,8 +10,7 @@ python-multipart
 httpx
 requests
 
-nltk
-tiktoken
+semantic-text-splitter
 openai
 instructor
 chromadb
