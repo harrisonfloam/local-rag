@@ -7,7 +7,8 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - APP_OLLAMA_URL=http://ollama:11434/v1
+      - APP_OLLAMA_HOST=ollama
+      - APP_CHROMA_HOST=chromadb
       # Dev settings
       - APP_DEV_MODE=true
       - APP_DEBUG=true
@@ -21,6 +22,8 @@ services:
     restart: unless-stopped
     depends_on:
       ollama:
+        condition: service_healthy
+      chromadb:
         condition: service_healthy
     command: ["bash", "-c", "python -m app.api.main & python -m streamlit run ui/streamlit_app.py --server.address=0.0.0.0"]
 
@@ -37,3 +40,23 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+  
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chromadb_data:/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+    healthcheck:
+      test: "bash -c 'cat < /dev/null > /dev/tcp/localhost/8000'"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  chromadb_data:
