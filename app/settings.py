@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     # Server settings
     debug: bool = False
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 8100
     reload: bool = False
     httpx_timeout: int = 30
     api_prefix: str = "/api"
@@ -19,18 +19,29 @@ class Settings(BaseSettings):
         return f"http://{self.host}:{self.port}{self.api_prefix}"
 
     # LLM settings
-    ollama_url: str = "http://localhost:11434/v1"
+    ollama_host: str = "localhost"
+    ollama_port: int = 11434
     model_name: str = "llama3.2:1b"
     temperature: float = 0.7
     mock_llm: bool = False  # DEV: Use a mock LLM for testing purposes
     # TODO: conversation memory settings
 
+    @property
+    def ollama_url(self) -> str:
+        return f"http://{self.ollama_host}:{self.ollama_port}/v1"
+
+    @property
+    def ollama_base_url(self) -> str:
+        return f"http://{self.ollama_host}:{self.ollama_port}"
+
     # RAG Settings
     # TODO: vectorstore settings, chunking, etc
-    use_rag: bool = True
+    chroma_host: str = "chromadb"
+    chroma_port: int = 8000
+    embedding_model_name: str = "nomic-embed-text:latest"
     top_k: int = 5
-    vector_db_url: str = ""
-
+    chunk_size: int = 1024
+    chunk_overlap: int = 200
     documents_path: str = "./data/documents"
     mock_rag_response: bool = False  # DEV: Use a mock RAG response for testing
     mock_documents: bool = False  # DEV: Use mock documents for testing
