@@ -1,6 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any, Dict, List
 
 import openai
@@ -82,7 +83,7 @@ class MockAsyncLLMClient(BaseLLMClient):
         response = ChatCompletion(
             id="mock_id",
             object="chat.completion",
-            created=1234567890,
+            created=int(datetime.now().timestamp()),
             model="mock-llm",
             choices=[
                 Choice(
