@@ -14,10 +14,6 @@ def main():
 
     render_sidebar()
 
-    # Request keys
-    # TODO: ingest request keys
-
-    # Clear chat
     render_chat()
     render_chat_metrics()
 

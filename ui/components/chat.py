@@ -83,68 +83,66 @@ def render_chat_metrics():
 
         if assistant_messages:
             last_msg = assistant_messages[-1]
+            prev_msg = assistant_messages[-2] if len(assistant_messages) > 1 else None
 
-            # Check if model changed
-            model_changed = False
-            if len(assistant_messages) > 1:
-                previous_model = assistant_messages[-2].metadata.model
-                model_changed = previous_model != last_msg.metadata.model
-
-            # Display current model info
             col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                if model_changed:
-                    st.metric(
-                        "Current Model",
-                        last_msg.metadata.model,
-                        delta="Changed",
-                        delta_color="normal",
-                    )
-                else:
-                    st.caption(f"🤖 {last_msg.metadata.model}")
 
+            # Model name
+            with col1:
+                st.caption(f"Model: {last_msg.metadata.model}")
+
+            # Response time
             with col2:
                 if last_msg.metadata.response_time:
-                    # Show response time with trend
                     current_time = last_msg.metadata.response_time
-                    delta_time = None
-                    if len(assistant_messages) > 1:
-                        prev_time = assistant_messages[-2].metadata.response_time
-                        if prev_time:
-                            delta_time = current_time - prev_time
+                    delta_text = ""
+                    if prev_msg and prev_msg.metadata.response_time:
+                        delta = current_time - prev_msg.metadata.response_time
+                        emoji = "🔻" if delta < 0 else "🔺"
+                        delta_text = f" {emoji}{abs(delta):.2f}s"
 
-                    st.metric(
-                        "Response Time",
-                        f"{current_time:.2f}s",
-                        delta=f"{delta_time:+.2f}s" if delta_time else None,
-                        delta_color="inverse",  # Lower is better
-                    )
+                    st.caption(f"Response Time: {current_time:.2f}s{delta_text}")
 
+            # Token usage
             with col3:
                 if last_msg.metadata.usage:
-                    total_tokens = last_msg.metadata.usage.get("total_tokens", 0)
-                    # Show token usage with trend
-                    delta_tokens = None
-                    if len(assistant_messages) > 1:
-                        prev_usage = assistant_messages[-2].metadata.usage
-                        if prev_usage:
-                            prev_tokens = prev_usage.get("total_tokens", 0)
-                            delta_tokens = total_tokens - prev_tokens
+                    prompt_tokens = last_msg.metadata.usage.get("prompt_tokens", 0)
+                    delta_text = ""
+                    if prev_msg and prev_msg.metadata.usage:
+                        prev_prompt = prev_msg.metadata.usage.get("prompt_tokens", 0)
+                        delta_prompt = prompt_tokens - prev_prompt
+                        if delta_prompt != 0:
+                            emoji = "🔻" if delta_prompt < 0 else "🔺"
+                            delta_text = f"{emoji}{abs(delta_prompt):,}"
 
-                    st.metric(
-                        "Total Tokens",
-                        total_tokens,
-                        delta=delta_tokens,
-                        delta_color="off",  # Neutral color for tokens
-                    )
+                    st.caption(f"Prompt tokens: {prompt_tokens:,} {delta_text}")
 
             with col4:
-                if last_msg.metadata.sources:
-                    st.metric("Sources", len(last_msg.metadata.sources))
-                else:
-                    st.caption("No RAG sources")
+                if last_msg.metadata.usage:
+                    completion_tokens = last_msg.metadata.usage.get(
+                        "completion_tokens", 0
+                    )
+                    delta_text = ""
+                    if prev_msg and prev_msg.metadata.usage:
+                        prev_completion = prev_msg.metadata.usage.get(
+                            "completion_tokens", 0
+                        )
+                        delta_completion = completion_tokens - prev_completion
+                        if delta_completion != 0:
+                            emoji = "🔻" if delta_completion < 0 else "🔺"
+                            delta_text = f"{emoji}{abs(delta_completion):,}"
+
+                    st.caption(f"Output tokens: {completion_tokens:,} {delta_text}")
+
+            # with col4:
+            #     sources_count = (
+            #         len(last_msg.metadata.sources) if last_msg.metadata.sources else 0
+            #     )
+            #     st.caption(
+            #         f"RAG Sources: {sources_count if sources_count > 0 else 'None'}"
+            #     )
     else:
-        st.caption(f"🤖 Ready: {st.session_state.completion_model}")
+        st.caption(f"Model: {st.session_state.completion_model}")
 
 
 def render_chat_history():
