@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -55,8 +56,8 @@ class Settings(BaseSettings):
         return f"http://{self.chroma_host}:{self.chroma_port}"
 
     # Logging settings
-    log_level: str = "INFO"
-    dependency_log_level: str = "WARNING"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    dep_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "WARNING"
 
     @property
     def logging_config(self) -> dict:
@@ -82,32 +83,32 @@ class Settings(BaseSettings):
             },
             "loggers": {
                 "uvicorn": {
-                    "level": self.dependency_log_level,
+                    "level": self.dep_log_level,
                     "handlers": ["console"],
                     "propagate": False,
                 },
                 "openai": {
-                    "level": self.dependency_log_level,
+                    "level": self.dep_log_level,
                     "handlers": ["console"],
                     "propagate": False,
                 },
                 "httpx": {
-                    "level": self.dependency_log_level,
+                    "level": self.dep_log_level,
                     "handlers": ["console"],
                     "propagate": False,
                 },
                 "httpcore": {
-                    "level": self.dependency_log_level,
+                    "level": self.dep_log_level,
                     "handlers": ["console"],
                     "propagate": False,
                 },
                 "uvicorn.access": {
-                    "level": self.dependency_log_level,
+                    "level": self.dep_log_level,
                     "handlers": ["console"],
                     "propagate": False,
                 },
                 "watchfiles": {
-                    "level": self.dependency_log_level,
+                    "level": self.dep_log_level,
                     "handlers": ["console"],
                     "propagate": False,
                 },
