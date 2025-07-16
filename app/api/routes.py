@@ -31,7 +31,7 @@ async def chat(request: ChatRequest):
     if request.mock_llm:
         llm = MockAsyncLLMClient(log_level="INFO")
     else:
-        llm = AsyncLLMClient(log_level="INFO")
+        llm = AsyncOllamaLLMClient(log_level="INFO")
 
     # Retrieve context
     retrieve_response = None
@@ -110,7 +110,7 @@ async def list_documents():
 @router.get("/models")
 async def list_models():
     """List available models."""
-    llm = AsyncLLMClient()
+    llm = AsyncOllamaLLMClient()
     models = await llm.client.models.list()
     model_names = [model.id for model in models.data]
     models_info = []
