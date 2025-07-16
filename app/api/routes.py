@@ -4,8 +4,13 @@ import logging
 import httpx
 from fastapi import APIRouter, status
 
-from app.api.schemas import ChatRequest, ChatResponse, RetrieveRequest, RetrieveResponse
-from app.core.llm_client import AsyncLLMClient, MockAsyncLLMClient
+from app.api.schemas import (
+    ChatCompletionWithSources,
+    ChatRequest,
+    RetrieveRequest,
+    RetrieveResponse,
+)
+from app.core.llm_client import AsyncOllamaLLMClient, MockAsyncLLMClient
 from app.core.prompts import RAG_USER_PROMPT
 from app.settings import settings
 
@@ -67,12 +72,9 @@ async def chat(request: ChatRequest):
         f"Chat response:\n{json.dumps(response.model_dump(), indent=2, default=str)}"
     )
 
-    return ChatResponse(
-        response=response.choices[0].message.content,
+    return ChatCompletionWithSources(
         sources=retrieve_response.results if retrieve_response else [],
-        model=request.model,
-        finish_reason=response.choices[0].finish_reason,
-        usage=response.usage.model_dump() if response.usage else None,
+        **response.model_dump(),
     )
 
 

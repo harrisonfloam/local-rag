@@ -1,6 +1,7 @@
 # Request models
 from typing import Any, Dict, List, Optional
 
+from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
 from app.core.ingestor import RetrievedDocumentChunk
@@ -19,6 +20,10 @@ class ChatRequest(BaseModel):
         ge=0.0,
         le=2.0,
         description="Temperature for response generation",
+    )
+    embedding_model: str = Field(
+        default=settings.embedding_model_name,
+        description="Embedding model to use for RAG",
     )
     top_k: int = Field(
         default=settings.top_k, ge=1, description="Number of documents to retrieve"
@@ -40,15 +45,11 @@ class RetrieveRequest(BaseModel):
     )
 
 
-class ChatResponse(BaseModel):
-    response: Optional[str] = Field(..., description="The LLM's response")
+class ChatCompletionWithSources(ChatCompletion):
+    """Chat response model that includes document sources."""
+
     sources: List[RetrievedDocumentChunk] = Field(
         default=[], description="Retrieved document sources"
-    )
-    model: str = Field(..., description="The LLM model that was used")
-    finish_reason: Optional[str] = Field(None, description="Response finish reason")
-    usage: Optional[Dict[str, Optional[int]]] = Field(
-        None, description="Usage statistics if available"
     )
 
 
