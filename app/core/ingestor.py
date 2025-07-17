@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
+from fastapi import UploadFile
 from pydantic import BaseModel, Field
 from semantic_text_splitter import TextSplitter
 
@@ -27,26 +28,57 @@ class Document(BaseModel):
         return cls(title=title, content=content, source=source, metadata=metadata)
 
     @classmethod
-    def from_file(cls, file_path: Union[str, Path], **metadata) -> "Document":
-        """Create document from file path."""
-        path = Path(file_path)
+    async def from_file(
+        cls, file: Union[str, Path, UploadFile], **metadata
+    ) -> "Document":
+        """Create document from file path or UploadFile."""
+        if isinstance(file, UploadFile):
+            # Handle FastAPI UploadFile
+            content_bytes = await file.read()
 
-        # TODO: extend for more file types - pdf, docx, etc
-        if path.suffix.lower() in [".txt", ".md"]:
-            content = path.read_text(encoding="utf-8")
+            # Handle different file types based on filename or content type
+            if file.content_type == "text/plain" or (
+                file.filename and file.filename.endswith((".txt", ".md"))
+            ):
+                content = content_bytes.decode("utf-8")
+            else:
+                raise ValueError(
+                    f"Unsupported file type: {file.content_type or 'unknown'}"
+                )
+
+            return cls(
+                title=file.filename or "Untitled",
+                content=content,
+                source=f"upload/{file.filename}",
+                metadata={
+                    "file_size": len(content_bytes),
+                    "file_extension": Path(file.filename).suffix
+                    if file.filename
+                    else "",
+                    "content_type": file.content_type,
+                    **metadata,
+                },
+            )
         else:
-            raise ValueError(f"Unsupported file type: {path.suffix}")
+            # Handle file path
+            path = Path(file)
 
-        return cls(
-            title=path.name,
-            content=content,
-            source=str(path),
-            metadata={
-                "file_size": path.stat().st_size,
-                "file_extension": path.suffix,
-                **metadata,
-            },
-        )
+            # TODO: extend for more file types - pdf, docx, etc
+            if path.suffix.lower() in [".txt", ".md"]:
+                content = path.read_text(encoding="utf-8")
+            else:
+                raise ValueError(f"Unsupported file type: {path.suffix}")
+
+            return cls(
+                title=path.name,
+                content=content,
+                source=str(path),
+                metadata={
+                    "file_size": path.stat().st_size,
+                    "file_extension": path.suffix,
+                    **metadata,
+                },
+            )
 
     def to_chunks(
         self,
