@@ -4,7 +4,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import chromadb
 from chromadb.api.types import Metadata
+from chromadb.errors import InvalidDimensionException
 from chromadb.utils import embedding_functions
+from fastapi import UploadFile
 
 from app.core.ingestor import Document, DocumentChunk, RetrievedDocumentChunk
 from app.settings import settings
@@ -18,6 +20,7 @@ class VectorStore(metaclass=CallbackMeta):
 
     def __init__(
         self,
+        collection_name: str = settings.collection_name,
         embedding_model: str = settings.embedding_model_name,
         log_level: str = settings.log_level,
     ):
@@ -39,8 +42,11 @@ class VectorStore(metaclass=CallbackMeta):
 
         # Get or create collection
         # TODO: error handling?
+        # TODO: collection naming... multiple collections...
+        # TODO: need to self check if docs are duplicated
+        self.collection_name = collection_name
         self.collection = self.client.get_or_create_collection(
-            name="documents",
+            name=self.collection_name,
             embedding_function=self.embedding_function,  # type: ignore
         )
 
@@ -54,13 +60,10 @@ class VectorStore(metaclass=CallbackMeta):
         """Add a document."""
         chunks = document.to_chunks(chunk_size=chunk_size, overlap=chunk_overlap)
 
-        texts, metadatas, ids = [], [], []
-        for chunk in chunks:
-            texts.append(chunk.content)
-            metadatas.append(chunk.chroma_metadata)
-            ids.append(chunk.id)
+        texts = [chunk.content for chunk in chunks]
+        metadatas = [chunk.chroma_metadata for chunk in chunks]
+        ids = [chunk.id for chunk in chunks]
 
-        # Add to vector store
         self.collection.add(
             documents=texts,
             metadatas=metadatas,  # type: ignore
@@ -86,35 +89,46 @@ class VectorStore(metaclass=CallbackMeta):
         )
 
     @with_callbacks
-    def add_file(
+    async def add_file(
         self,
-        file_path: Union[str, Path],
+        file: Union[str, Path, UploadFile],
         chunk_size: int = settings.chunk_size,
         chunk_overlap: int = settings.chunk_overlap,
     ) -> List[str]:
-        """Add a file."""
-        document = Document.from_file(file_path)
+        """Add a file (path or upload)."""
+        if isinstance(file, UploadFile):
+            document = await Document.from_upload(file)
+        else:
+            document = Document.from_file(file)
+
         return self.add_document(
             document, chunk_size=chunk_size, chunk_overlap=chunk_overlap
         )
 
-    def add_files(
+    async def add_files(
         self,
-        file_paths: List[Union[str, Path]],
+        files: List[Union[str, Path, UploadFile]],
         chunk_size: int = settings.chunk_size,
         chunk_overlap: int = settings.chunk_overlap,
     ) -> Dict[str, List[str]]:
         """Add multiple files."""
         results = {}
-        for file_path in file_paths:
+        for file in files:
+            # Get filename
+            if isinstance(file, UploadFile):
+                filename = file.filename or "unknown"
+            else:
+                filename = str(file)
             try:
                 ids = self.add_file(
-                    file_path, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                    file, chunk_size=chunk_size, chunk_overlap=chunk_overlap
                 )
-                results[str(file_path)] = ids
+
+                results[filename] = ids
             except Exception as e:
-                logger.error(f"Failed to add {file_path}: {e}")
-                results[str(file_path)] = []
+                logger.warning(f"Failed to add {filename}: {e}")
+                # TODO: add collection name to log
+                results[filename] = []
         return results
 
     @with_callbacks
@@ -123,38 +137,41 @@ class VectorStore(metaclass=CallbackMeta):
         try:
             results = self.collection.query(query_texts=[query], n_results=k)
         except Exception as e:
-            if "too long" in str(e).lower():
-                raise ValueError(
-                    f"Query too long for embedding model: {query[:100]}..."
-                ) from e
-            raise
+            raise ValueError(f"Search failed: {str(e)}") from e
 
-        # Format results as RetrievedDocumentChunk objects
-        chunks = []
-        if results["documents"] and results["documents"][0]:
-            for i in range(len(results["documents"][0])):
-                metadata = results["metadatas"][0][i] or {}
+        if not results["documents"]:
+            return []
 
-                chunk = RetrievedDocumentChunk(
-                    id=results["ids"][0][i],
-                    content=results["documents"][0][i],
-                    document_id=metadata.get("document_id", "unknown"),
-                    document_title=metadata.get("document_title", "Unknown"),
-                    chunk_index=metadata.get("chunk_index", 0),
-                    metadata=metadata,
-                    score=1
-                    - results["distances"][0][i],  # Convert distance to similarity
-                )
-                chunks.append(chunk)
+        # NOTE: Type checker isn't satisfied but our schemas ensure safety
+        assert results["metadatas"] is not None and results["distances"] is not None
+        assert (
+            results["metadatas"][0] is not None and results["distances"][0] is not None
+        )
 
-        return chunks
+        return [
+            RetrievedDocumentChunk(
+                id=str(chunk_id),
+                content=str(doc),
+                document_id=str(meta["document_id"]),
+                document_title=str(meta["document_title"]),
+                chunk_index=int(meta["chunk_index"] or 0),
+                metadata=dict(meta),
+                score=1.0 - float(distance),
+            )
+            for doc, meta, chunk_id, distance in zip(
+                results["documents"][0],
+                results["metadatas"][0],
+                results["ids"][0],
+                results["distances"][0],
+            )
+        ]
 
     def get_collection_info(self) -> Dict[str, Any]:
         """Get information about the collection."""
         count = self.collection.count()
         # TODO: get all the ids?
         return {
-            "name": "documents",
+            "name": self.collection_name,
             "count": count,
             "embedding_function": self.embedding_model,
         }

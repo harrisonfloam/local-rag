@@ -28,57 +28,51 @@ class Document(BaseModel):
         return cls(title=title, content=content, source=source, metadata=metadata)
 
     @classmethod
-    async def from_file(
-        cls, file: Union[str, Path, UploadFile], **metadata
-    ) -> "Document":
-        """Create document from file path or UploadFile."""
-        if isinstance(file, UploadFile):
-            # Handle FastAPI UploadFile
-            content_bytes = await file.read()
+    def from_file(cls, file: Union[str, Path], **metadata) -> "Document":
+        """Create document from file path (synchronous)."""
+        path = Path(file)
 
-            # Handle different file types based on filename or content type
-            if file.content_type == "text/plain" or (
-                file.filename and file.filename.endswith((".txt", ".md"))
-            ):
-                content = content_bytes.decode("utf-8")
-            else:
-                raise ValueError(
-                    f"Unsupported file type: {file.content_type or 'unknown'}"
-                )
-
-            return cls(
-                title=file.filename or "Untitled",
-                content=content,
-                source=f"upload/{file.filename}",
-                metadata={
-                    "file_size": len(content_bytes),
-                    "file_extension": Path(file.filename).suffix
-                    if file.filename
-                    else "",
-                    "content_type": file.content_type,
-                    **metadata,
-                },
-            )
+        # TODO: extend for more file types - pdf, docx, etc
+        if path.suffix.lower() in [".txt", ".md"]:
+            content = path.read_text(encoding="utf-8")
         else:
-            # Handle file path
-            path = Path(file)
+            raise ValueError(f"Unsupported file type: {path.suffix}")
 
-            # TODO: extend for more file types - pdf, docx, etc
-            if path.suffix.lower() in [".txt", ".md"]:
-                content = path.read_text(encoding="utf-8")
-            else:
-                raise ValueError(f"Unsupported file type: {path.suffix}")
+        return cls(
+            title=path.name,
+            content=content,
+            source=str(path),
+            metadata={
+                "file_size": path.stat().st_size,
+                "file_extension": path.suffix,
+                **metadata,
+            },
+        )
 
-            return cls(
-                title=path.name,
-                content=content,
-                source=str(path),
-                metadata={
-                    "file_size": path.stat().st_size,
-                    "file_extension": path.suffix,
-                    **metadata,
-                },
-            )
+    @classmethod
+    async def from_upload(cls, file: UploadFile, **metadata) -> "Document":
+        """Create document from FastAPI UploadFile (asynchronous)."""
+        content_bytes = await file.read()
+
+        # Handle different file types based on filename or content type
+        if file.content_type == "text/plain" or (
+            file.filename and file.filename.endswith((".txt", ".md"))
+        ):
+            content = content_bytes.decode("utf-8")
+        else:
+            raise ValueError(f"Unsupported file type: {file.content_type or 'unknown'}")
+
+        return cls(
+            title=file.filename or "Untitled",
+            content=content,
+            source=f"upload/{file.filename}",
+            metadata={
+                "file_size": len(content_bytes),
+                "file_extension": Path(file.filename).suffix if file.filename else "",
+                "content_type": file.content_type,
+                **metadata,
+            },
+        )
 
     def to_chunks(
         self,
@@ -93,25 +87,24 @@ class Document(BaseModel):
 
         chunks_text = splitter.chunks(self.content)
 
-        chunks = []
-        for i, chunk_text in enumerate(chunks_text):
-            chunks.append(
-                DocumentChunk(
-                    content=chunk_text,
-                    document_id=self.id,
-                    document_title=self.title,
-                    chunk_index=i,
-                    metadata={
-                        **self.metadata,  # original document metadata
-                        "source": self.source,
-                        "total_chunks": len(chunks_text),
-                        "chunk_size": chunk_size,
-                        "chunk_overlap": overlap,
-                    },
-                )
-            )
+        chunk_metadata = {
+            **self.metadata,  # Original document metadata
+            "source": self.source,
+            "total_chunks": len(chunks_text),
+            "chunk_size": chunk_size,
+            "chunk_overlap": overlap,
+        }
 
-        return chunks
+        return [
+            DocumentChunk(
+                content=chunk_text,
+                document_id=self.id,
+                document_title=self.title,
+                chunk_index=i,
+                metadata=chunk_metadata,
+            )
+            for i, chunk_text in enumerate(chunks_text)
+        ]
 
 
 class DocumentChunk(BaseModel):
