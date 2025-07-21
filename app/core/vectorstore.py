@@ -1,8 +1,9 @@
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import chromadb
+from attr import dataclass
 from chromadb.api.types import Metadata
 from chromadb.errors import InvalidDimensionException
 from chromadb.utils import embedding_functions
@@ -13,6 +14,14 @@ from app.settings import settings
 from app.utils.callbacks import CallbackMeta, with_callbacks
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AddFilesResult:
+    """Result of adding files to the vector store."""
+
+    chunk_ids: Dict[str, List[str]]  # filename -> chunk_ids
+    errors: Dict[str, str]  # filename -> error_message
 
 
 class VectorStore(metaclass=CallbackMeta):
@@ -34,6 +43,7 @@ class VectorStore(metaclass=CallbackMeta):
 
         # Create embedding function for Ollama
         self.embedding_model = embedding_model
+        # TODO: is there an async embedding function?
         self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
             api_key="ollama",
             api_base=settings.ollama_url,
@@ -64,12 +74,19 @@ class VectorStore(metaclass=CallbackMeta):
         metadatas = [chunk.chroma_metadata for chunk in chunks]
         ids = [chunk.id for chunk in chunks]
 
-        self.collection.add(
-            documents=texts,
-            metadatas=metadatas,  # type: ignore
-            ids=ids,
-        )
-
+        try:
+            self.collection.add(
+                documents=texts,
+                metadatas=metadatas,  # type: ignore
+                ids=ids,
+            )
+            logger.debug(
+                f"Added {len(texts)} chunks from document '{document.title}' to collection '{self.collection_name}'"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to add document '{document.title}' to collection '{self.collection_name}': {e}"
+            )
         # TODO: capture error types here?
         return ids
 
@@ -107,12 +124,13 @@ class VectorStore(metaclass=CallbackMeta):
 
     async def add_files(
         self,
-        files: List[Union[str, Path, UploadFile]],
+        files: Sequence[Union[str, Path, UploadFile]],
         chunk_size: int = settings.chunk_size,
         chunk_overlap: int = settings.chunk_overlap,
-    ) -> Dict[str, List[str]]:
+    ) -> AddFilesResult:
         """Add multiple files."""
-        results = {}
+        chunk_ids = {}
+        errors = {}
         for file in files:
             # Get filename
             if isinstance(file, UploadFile):
@@ -123,13 +141,13 @@ class VectorStore(metaclass=CallbackMeta):
                 ids = self.add_file(
                     file, chunk_size=chunk_size, chunk_overlap=chunk_overlap
                 )
-
-                results[filename] = ids
+                chunk_ids[filename] = ids
             except Exception as e:
-                logger.warning(f"Failed to add {filename}: {e}")
-                # TODO: add collection name to log
-                results[filename] = []
-        return results
+                errors[filename] = str(e)
+        return AddFilesResult(
+            chunk_ids=chunk_ids,
+            errors=errors,
+        )
 
     @with_callbacks
     def search(self, query: str, k: int = 5) -> List[RetrievedDocumentChunk]:
