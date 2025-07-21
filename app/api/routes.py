@@ -1,17 +1,22 @@
 import json
 import logging
+from typing import List
 
 import httpx
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.api.schemas import (
     ChatCompletionWithSources,
     ChatRequest,
+    IngestRequest,
+    IngestResponse,
     RetrieveRequest,
     RetrieveResponse,
 )
+from app.core.ingestor import Document
 from app.core.llm_client import AsyncOllamaLLMClient, MockAsyncLLMClient
 from app.core.prompts import RAG_USER_PROMPT
+from app.core.vectorstore import VectorStore
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -29,14 +34,17 @@ async def chat(request: ChatRequest):
     """Chat with the RAG system."""
     # TODO: remake this with streaming
     if request.mock_llm:
-        llm = MockAsyncLLMClient(log_level="INFO")
+        llm = MockAsyncLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
     else:
-        llm = AsyncOllamaLLMClient(log_level="INFO")
+        llm = AsyncOllamaLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
 
     # Retrieve context
     retrieve_response = None
     if request.use_rag:
         query = request.messages[-1]["content"]
+        # TODO: add summary of conversation history to query? core request? param to toggle this?
+        # a new system prompt that takes the summarized conversation history
+        # and rephrases the RAG query to be better
         retrieve_request = RetrieveRequest(query=query, top_k=request.top_k)
         retrieve_response = await retrieve(retrieve_request)
         retrieved_docs = "\n\n".join([str(doc) for doc in retrieve_response.results])
@@ -89,16 +97,32 @@ async def retrieve(request: RetrieveRequest):
 
 
 @router.post("/documents/ingest")
-def ingest_documents():
-    """Ingest documents into the vectorstore."""
-    # TODO:
-    # - save files, extract text - from upload or directory
-    # - embed and store in vectorstore
-    # NOTE:
-    # - this endpoint should get hit when /chat does - but if the docs already exist, it doesnt reingest
-    # - or just auto ingest and make an endpoint that gives us the status?
-    # - OR: strictly only ingest docs via this endpoint, track which docs are uploaded on frontend, /chat only uses whats in the vectorstore
-    pass
+async def ingest_documents(
+    files: List[UploadFile] = File(...),
+    request: IngestRequest = Depends(),
+) -> IngestResponse:
+    """Ingest uploaded documents into the vectorstore."""
+    try:
+        vectorstore = VectorStore(
+            log_level="INFO" if not settings.debug else "DEBUG",
+            collection_name=request.collection_name,
+            embedding_model=request.embedding_model,
+        )
+
+        results = await vectorstore.add_files(
+            files=files,
+            chunk_size=request.chunk_size,
+            chunk_overlap=request.chunk_overlap,
+        )
+
+        return IngestResponse(
+            chunk_ids=results.chunk_ids,
+            errors=results.errors,
+        )
+
+    except Exception as e:
+        logger.error(f"Ingest operation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
 
 @router.get("/documents")
@@ -110,7 +134,7 @@ async def list_documents():
 @router.get("/models")
 async def list_models():
     """List available models."""
-    llm = AsyncOllamaLLMClient()
+    llm = AsyncOllamaLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
     models = await llm.client.models.list()
     model_names = [model.id for model in models.data]
     models_info = []
