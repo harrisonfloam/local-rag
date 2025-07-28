@@ -2,9 +2,9 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-from fastapi import UploadFile
 from pydantic import BaseModel, Field
 from semantic_text_splitter import TextSplitter
+from starlette.datastructures import UploadFile
 
 from app.settings import settings
 
