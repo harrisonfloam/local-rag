@@ -1,13 +1,13 @@
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Sequence, Union
 
 import chromadb
 from attr import dataclass
 from chromadb.api.types import Metadata
 from chromadb.errors import InvalidDimensionException
 from chromadb.utils import embedding_functions
-from fastapi import UploadFile
+from starlette.datastructures import UploadFile
 
 from app.core.ingestor import Document, DocumentChunk, RetrievedDocumentChunk
 from app.settings import settings
@@ -16,12 +16,68 @@ from app.utils.callbacks import CallbackMeta, with_callbacks
 logger = logging.getLogger(__name__)
 
 
+class CollectionInfo:
+    """Domain model for collection information."""
+
+    def __init__(
+        self,
+        name: str,
+        embedding_model: str,
+        documents: List[Document],
+        total_chunks: int,
+    ):
+        self.name = name
+        self.embedding_model = embedding_model
+        self.documents = documents
+        self.total_chunks = total_chunks
+
+    @property
+    def total_documents(self) -> int:
+        """Computed property: total number of documents."""
+        return len(self.documents)
+
+    @property
+    def total_file_size(self) -> int:
+        """Computed property: total file size across all documents."""
+        return sum(doc.metadata.get("file_size", 0) or 0 for doc in self.documents)
+
+    @property
+    def file_types(self) -> Dict[str, int]:
+        """Computed property: count of files by extension."""
+        file_types = {}
+        for doc in self.documents:
+            ext = doc.metadata.get("file_extension", "unknown") or "unknown"
+            file_types[ext] = file_types.get(ext, 0) + 1
+        return file_types
+
+    @classmethod
+    def from_documents(
+        cls,
+        name: str,
+        embedding_model: str,
+        documents: List[Document],
+        total_chunks: int,
+    ) -> "CollectionInfo":
+        """Create CollectionInfo from a list of documents and total chunk count."""
+        return cls(
+            name=name,
+            embedding_model=embedding_model,
+            documents=documents,
+            total_chunks=total_chunks,
+        )
+
+
 @dataclass
 class AddFilesResult:
     """Result of adding files to the vector store."""
 
     chunk_ids: Dict[str, List[str]]  # filename -> chunk_ids
     errors: Dict[str, str]  # filename -> error_message
+
+    @property
+    def total_chunks(self) -> int:
+        """Total number of chunks added."""
+        return sum(len(ids) for ids in self.chunk_ids.values())
 
 
 class VectorStore(metaclass=CallbackMeta):
@@ -52,7 +108,6 @@ class VectorStore(metaclass=CallbackMeta):
 
         # Get or create collection
         # TODO: error handling?
-        # TODO: collection naming... multiple collections...
         # TODO: need to self check if docs are duplicated
         self.collection_name = collection_name
         self.collection = self.client.get_or_create_collection(
@@ -79,9 +134,6 @@ class VectorStore(metaclass=CallbackMeta):
                 documents=texts,
                 metadatas=metadatas,  # type: ignore
                 ids=ids,
-            )
-            logger.debug(
-                f"Added {len(texts)} chunks from document '{document.title}' to collection '{self.collection_name}'"
             )
         except Exception as e:
             logger.warning(
@@ -138,7 +190,7 @@ class VectorStore(metaclass=CallbackMeta):
             else:
                 filename = str(file)
             try:
-                ids = self.add_file(
+                ids = await self.add_file(
                     file, chunk_size=chunk_size, chunk_overlap=chunk_overlap
                 )
                 chunk_ids[filename] = ids
@@ -184,15 +236,33 @@ class VectorStore(metaclass=CallbackMeta):
             )
         ]
 
-    def get_collection_info(self) -> Dict[str, Any]:
-        """Get information about the collection."""
+    def get_collection_info(self) -> CollectionInfo:
+        """Get comprehensive information about the collection."""
         count = self.collection.count()
-        # TODO: get all the ids?
-        return {
-            "name": self.collection_name,
-            "count": count,
-            "embedding_function": self.embedding_model,
-        }
+
+        # Get all metadata to analyze documents
+        results = self.collection.get(include=["metadatas"])
+        metadatas = results.get("metadatas") or []
+
+        # Group chunks by document_id and reconstruct Document objects
+        documents_by_id = {}
+        for meta in metadatas:
+            if meta and "document_id" in meta:
+                doc_id = str(meta["document_id"])
+                if doc_id not in documents_by_id:
+                    # Create Document from first chunk's metadata
+                    documents_by_id[doc_id] = Document.from_chunk_metadata(
+                        doc_id, dict(meta)
+                    )
+
+        document_objects = list(documents_by_id.values())
+
+        return CollectionInfo.from_documents(
+            name=self.collection_name,
+            embedding_model=self.embedding_model,
+            documents=document_objects,
+            total_chunks=count,
+        )
 
     def delete_documents(self, ids: List[str]) -> bool:
         """Delete documents by IDs."""
@@ -200,60 +270,18 @@ class VectorStore(metaclass=CallbackMeta):
         return True
 
     # Callback methods
-    def _pre_add_document(self, document: Document, *args, **kwargs):
-        logger.debug(f"Adding document: {document.title}")
-
     def _post_add_document(
         self, result: List[str], duration: float, document: Document, *args, **kwargs
     ):
         logger.debug(
-            f"Added document '{document.title}' as {len(result)} chunks in {duration:.4f}s"
-        )
-        return result
-
-    def _pre_add_text(self, text: str, title: str, *args, **kwargs):
-        logger.debug(f"Adding text: {title}")
-
-    def _post_add_text(
-        self, result: List[str], duration: float, text: str, title: str, *args, **kwargs
-    ):
-        logger.debug(f"Added text '{title}' as {len(result)} chunks in {duration:.4f}s")
-        return result
-
-    def _pre_add_file(self, file_path: Union[str, Path], *args, **kwargs):
-        logger.debug(f"Adding 1 file: {file_path}")
-
-    def _post_add_file(
-        self,
-        result: List[str],
-        duration: float,
-        file_path: Union[str, Path],
-        *args,
-        **kwargs,
-    ):
-        logger.debug(
-            f"Added file '{file_path}' as {len(result)} chunks in {duration:.4f}s"
-        )
-        return result
-
-    def _pre_add_files(self, file_paths: List[Union[str, Path]], *args, **kwargs):
-        logger.debug(f"Adding {len(file_paths)} files: {file_paths[:3]}...")
-
-    def _post_add_files(
-        self,
-        result: List[str],
-        duration: float,
-        file_paths: List[Union[str, Path]],
-        *args,
-        **kwargs,
-    ):
-        logger.debug(
-            f"Added {len(file_paths)} files as {len(result)} chunks in {duration:.4f}s"
+            f"Added document '{document.title}' as {len(result)} chunks to collection '{self.collection_name}' in {duration:.4f}s"
         )
         return result
 
     def _pre_search(self, query: str, k: int, *args, **kwargs):
-        logger.debug(f"Searching for: '{query[:50]}...' (k={k})")
+        logger.debug(
+            f"Searching collection '{self.collection_name}' for: '{query[:50]}...' (k={k})"
+        )
 
     def _post_search(
         self,
@@ -265,4 +293,5 @@ class VectorStore(metaclass=CallbackMeta):
         **kwargs,
     ):
         logger.info(f"Found {len(result)} results in {duration:.4f}s")
+        logger.debug(f"Search results: {[str(chunk) for chunk in result[:5]]} ...")
         return result
