@@ -133,12 +133,3 @@ class CollectionInfoResponse(BaseModel):
     total_documents: int
     embedding_model: str
     documents: List[Document]
-
-    # Optional computed statistics
-    average_chunks_per_document: float = Field(
-        default=0, description="Average chunks per document"
-    )
-    total_file_size: int = Field(default=0, description="Total file size in bytes")
-    file_types: Dict[str, int] = Field(
-        default_factory=dict, description="File types count"
-    )
