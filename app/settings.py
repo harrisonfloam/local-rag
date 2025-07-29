@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     ollama_port: int = 11434
     model_name: str = "llama3.2:1b"
     temperature: float = 0.7
+    async_llm: bool = False  # Use async LLM calls
     mock_llm: bool = False  # DEV: Use a mock LLM for testing purposes
     # TODO: conversation memory settings
 
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
     # TODO: vectorstore settings, chunking, etc
     chroma_host: str = "chromadb"
     chroma_port: int = 8000
+    collection_name: str = "documents"
     embedding_model_name: str = "nomic-embed-text:latest"
     top_k: int = 5
     chunk_size: int = 1024
@@ -108,6 +110,26 @@ class Settings(BaseSettings):
                     "propagate": False,
                 },
                 "watchfiles": {
+                    "level": self.dep_log_level,
+                    "handlers": ["console"],
+                    "propagate": False,
+                },
+                "chromadb": {
+                    "level": self.dep_log_level,
+                    "handlers": ["console"],
+                    "propagate": False,
+                },
+                "chromadb.config": {
+                    "level": self.dep_log_level,
+                    "handlers": ["console"],
+                    "propagate": False,
+                },
+                "urllib3.connectionpool": {
+                    "level": self.dep_log_level,
+                    "handlers": ["console"],
+                    "propagate": False,
+                },
+                "python_multipart.multipart": {
                     "level": self.dep_log_level,
                     "handlers": ["console"],
                     "propagate": False,
