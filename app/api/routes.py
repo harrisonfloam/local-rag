@@ -8,12 +8,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from app.api.schemas import (
     ChatCompletionWithSources,
     ChatRequest,
+    CollectionInfoResponse,
     IngestRequest,
     IngestResponse,
     RetrieveRequest,
     RetrieveResponse,
 )
-from app.core.ingestor import Document
 from app.core.llm_client import AsyncOllamaLLMClient, MockAsyncLLMClient
 from app.core.prompts import RAG_USER_PROMPT
 from app.core.vectorstore import VectorStore
@@ -102,33 +102,46 @@ async def ingest_documents(
     request: IngestRequest = Depends(),
 ) -> IngestResponse:
     """Ingest uploaded documents into the vectorstore."""
-    try:
-        vectorstore = VectorStore(
-            log_level="INFO" if not settings.debug else "DEBUG",
-            collection_name=request.collection_name,
-            embedding_model=request.embedding_model,
-        )
+    vectorstore = VectorStore(
+        log_level="INFO" if not settings.debug else "DEBUG",
+        collection_name=request.collection_name,
+        embedding_model=request.embedding_model,
+    )
 
-        results = await vectorstore.add_files(
-            files=files,
-            chunk_size=request.chunk_size,
-            chunk_overlap=request.chunk_overlap,
-        )
+    results = await vectorstore.add_files(
+        files=files,
+        chunk_size=request.chunk_size,
+        chunk_overlap=request.chunk_overlap,
+    )
 
-        return IngestResponse(
-            chunk_ids=results.chunk_ids,
-            errors=results.errors,
-        )
+    response = IngestResponse(
+        chunk_ids=results.chunk_ids,
+        errors=results.errors,
+    )
+    logger.debug(
+        f"Ingest response:\n{json.dumps(response.model_dump(), indent=2, default=str)}"
+    )
+    return response
 
-    except Exception as e:
-        logger.error(f"Ingest operation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
-
-@router.get("/documents")
+@router.get("/documents", response_model=CollectionInfoResponse)
 async def list_documents():
     """List all documents in the vectorstore."""
-    pass
+    vectorstore = VectorStore(
+        collection_name=settings.collection_name,
+        embedding_model=settings.embedding_model_name,
+    )
+
+    collection_info = vectorstore.get_collection_info()
+
+    # Convert CollectionInfo domain model to API response model
+    return CollectionInfoResponse(
+        name=collection_info.name,
+        total_chunks=collection_info.total_chunks,
+        total_documents=collection_info.total_documents,
+        embedding_model=collection_info.embedding_model,
+        documents=collection_info.documents,
+    )
 
 
 @router.get("/models")

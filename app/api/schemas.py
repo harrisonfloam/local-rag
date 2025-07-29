@@ -1,10 +1,10 @@
 # Request models
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
-from app.core.ingestor import RetrievedDocumentChunk
+from app.core.ingestor import Document, RetrievedDocumentChunk
 from app.core.prompts import RAG_SYSTEM_PROMPT
 from app.settings import settings
 
@@ -124,3 +124,21 @@ class IngestResponse(BaseModel):
             return "failed"
         else:
             return "completed"
+
+
+# Document listing endpoint
+class CollectionInfoResponse(BaseModel):
+    name: str
+    total_chunks: int
+    total_documents: int
+    embedding_model: str
+    documents: List[Document]
+
+    # Optional computed statistics
+    average_chunks_per_document: float = Field(
+        default=0, description="Average chunks per document"
+    )
+    total_file_size: int = Field(default=0, description="Total file size in bytes")
+    file_types: Dict[str, int] = Field(
+        default_factory=dict, description="File types count"
+    )
