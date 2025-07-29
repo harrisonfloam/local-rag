@@ -29,7 +29,7 @@ class Document(BaseModel):
 
     @classmethod
     def from_file(cls, file: Union[str, Path], **metadata) -> "Document":
-        """Create document from file path (synchronous)."""
+        """Create document from file path."""
         path = Path(file)
 
         # TODO: extend for more file types - pdf, docx, etc
@@ -50,8 +50,35 @@ class Document(BaseModel):
         )
 
     @classmethod
+    def from_chunk_metadata(
+        cls, document_id: str, metadata: Dict[str, Any]
+    ) -> "Document":
+        """Reconstruct a Document from chunk metadata stored in ChromaDB."""
+        # Filter out chunk-specific and chunking-process metadata
+        document_metadata = {
+            key: value
+            for key, value in metadata.items()
+            if key
+            not in {
+                "chunk_id",
+                "document_id",
+                "document_title",
+                "chunk_index",
+                "source",
+            }
+        }
+
+        return cls(
+            id=document_id,
+            title=metadata.get("document_title", "Unknown"),
+            content="",  # Content not available from metadata
+            source=metadata.get("source", "unknown"),
+            metadata=document_metadata,
+        )
+
+    @classmethod
     async def from_upload(cls, file: UploadFile, **metadata) -> "Document":
-        """Create document from FastAPI UploadFile (asynchronous)."""
+        """Create document from FastAPI UploadFile"""
         content_bytes = await file.read()
 
         # Handle different file types based on filename or content type
