@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Dict, List, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 import chromadb
 from attr import dataclass
@@ -49,6 +49,13 @@ class CollectionInfo:
             ext = doc.metadata.get("file_extension", "unknown") or "unknown"
             file_types[ext] = file_types.get(ext, 0) + 1
         return file_types
+
+    def __str__(self) -> str:
+        """String representation for logging."""
+        return (
+            f"Collection '{self.name}': {self.total_documents} documents, "
+            f"{self.total_chunks} chunks, embedding model: {self.embedding_model}"
+        )
 
     @classmethod
     def from_documents(
@@ -236,15 +243,25 @@ class VectorStore(metaclass=CallbackMeta):
             )
         ]
 
-    def get_collection_info(self) -> CollectionInfo:
-        """Get comprehensive information about the collection."""
+    @with_callbacks
+    def get_collection_info(
+        self, collection_name: Optional[str] = None
+    ) -> CollectionInfo:
+        """Get collection info."""
+        if collection_name and collection_name != self.collection_name:
+            # Create temporary instance for different collection
+            temp_store = VectorStore(
+                collection_name=collection_name,
+                embedding_model=self.embedding_model,
+            )
+            return temp_store.get_collection_info()
+
         count = self.collection.count()
 
-        # Get all metadata to analyze documents
         results = self.collection.get(include=["metadatas"])
         metadatas = results.get("metadatas") or []
 
-        # Group chunks by document_id and reconstruct Document objects
+        # Reconstruct Document objects
         documents_by_id = {}
         for meta in metadatas:
             if meta and "document_id" in meta:
@@ -264,9 +281,26 @@ class VectorStore(metaclass=CallbackMeta):
             total_chunks=count,
         )
 
-    def delete_documents(self, ids: List[str]) -> bool:
+    @with_callbacks
+    def delete_documents(
+        self, ids: List[str], collection_name: Optional[str] = None
+    ) -> bool:
         """Delete documents by IDs."""
+        if collection_name and collection_name != self.collection_name:
+            # Create temporary instance for different collection
+            temp_store = VectorStore(
+                collection_name=collection_name,
+                embedding_model=self.embedding_model,
+            )
+            return temp_store.delete_documents(ids)
+
         self.collection.delete(ids=ids)
+        return True
+
+    @with_callbacks
+    def delete_collection(self, collection_name: Optional[str] = None) -> bool:
+        """Delete the entire collection."""
+        self.client.delete_collection(name=collection_name or self.collection_name)
         return True
 
     # Callback methods
@@ -293,5 +327,45 @@ class VectorStore(metaclass=CallbackMeta):
         **kwargs,
     ):
         logger.info(f"Found {len(result)} results in {duration:.4f}s")
-        logger.debug(f"Search results: {[str(chunk) for chunk in result[:5]]} ...")
+        logger.debug(
+            f"Search results: {[f'Chunk {chunk.chunk_index} from {chunk.document_title} (score {chunk.score:.2f})' for chunk in result[:5]]} ..."
+        )
+        return result
+
+    def _post_delete_collection(
+        self,
+        result: bool,
+        duration: float,
+        collection_name: Optional[str] = None,
+        *args,
+        **kwargs,
+    ):
+        target_collection = collection_name or self.collection_name
+        logger.info(f"Deleted collection '{target_collection}' in {duration:.4f}s")
+        return result
+
+    def _post_get_collection_info(
+        self,
+        result: CollectionInfo,
+        duration: float,
+        collection_name: Optional[str] = None,
+        *args,
+        **kwargs,
+    ):
+        logger.debug(f"Retrieved collection info:\n{result}")
+        return result
+
+    def _post_delete_documents(
+        self,
+        result: bool,
+        duration: float,
+        ids: List[str],
+        collection_name: Optional[str] = None,
+        *args,
+        **kwargs,
+    ):
+        target_collection = collection_name or self.collection_name
+        logger.info(
+            f"Deleted {len(ids)} documents from collection '{target_collection}' in {duration:.4f}s"
+        )
         return result
