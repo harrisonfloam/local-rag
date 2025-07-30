@@ -18,6 +18,7 @@ from app.core.llm_client import AsyncOllamaLLMClient, MockAsyncLLMClient
 from app.core.prompts import RAG_USER_PROMPT
 from app.core.vectorstore import VectorStore
 from app.settings import settings
+from app.utils.utils import truncate_long_strings
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +51,7 @@ async def chat(request: ChatRequest):
         retrieved_docs = "\n\n".join([str(doc) for doc in retrieve_response.results])
 
         # Build LLM payload
-        query_with_context = RAG_USER_PROMPT.format(
-            context=retrieved_docs, question=query
-        )
+        query_with_context = RAG_USER_PROMPT.format(context=retrieved_docs, query=query)
         user_message = {"role": "user", "content": query_with_context}
     else:
         # Build message without context
@@ -76,10 +75,6 @@ async def chat(request: ChatRequest):
         temperature=request.temperature,
     )
 
-    logger.debug(
-        f"Chat response:\n{json.dumps(response.model_dump(), indent=2, default=str)}"
-    )
-
     return ChatCompletionWithSources(
         sources=retrieve_response.results if retrieve_response else [],
         **response.model_dump(),
@@ -89,11 +84,20 @@ async def chat(request: ChatRequest):
 @router.post("/retrieve")
 async def retrieve(request: RetrieveRequest):
     """Retrieve relevant documents based on a query."""
-    # TODO:
-    # - embed query
-    # - search vectorstore using search strategy, top_k
-    # - rerank?
-    return RetrieveResponse(query="", results=[])
+    vectorstore = VectorStore(
+        collection_name=settings.collection_name,
+        embedding_model=settings.embedding_model_name,
+    )
+
+    results = vectorstore.search(query=request.query, k=request.top_k)
+
+    response = RetrieveResponse(query=request.query, results=results)
+
+    logger.debug(
+        f"Retrieve response for '{request.query}': {len(results)} results, top score: {results[0].score if results else 'N/A'}"
+    )
+
+    return response
 
 
 @router.post("/documents/ingest")
@@ -134,14 +138,19 @@ async def list_documents():
 
     collection_info = vectorstore.get_collection_info()
 
-    # Convert CollectionInfo domain model to API response model
-    return CollectionInfoResponse(
+    response = CollectionInfoResponse(
         name=collection_info.name,
         total_chunks=collection_info.total_chunks,
         total_documents=collection_info.total_documents,
         embedding_model=collection_info.embedding_model,
         documents=collection_info.documents,
     )
+
+    logger.debug(
+        f"Documents list response:\n{json.dumps(response.model_dump(), indent=2, default=str)}"
+    )
+
+    return response
 
 
 @router.get("/models")

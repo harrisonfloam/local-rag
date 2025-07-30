@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
     top_k: int = Field(
         default=settings.top_k, ge=1, description="Number of documents to retrieve"
     )
+    # TODO: put dev settings in a subclass
     use_rag: bool = Field(
         default=True,
         description="Whether to use RAG context",
