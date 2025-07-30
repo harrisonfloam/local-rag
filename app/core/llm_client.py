@@ -129,7 +129,7 @@ class AsyncOllamaLLMClient(AsyncOpenAILLMClient):
 
 
 class MockAsyncLLMClient(BaseLLMClient):
-    """Base mock LLM client with configurable response types and seeding."""
+    """Mock LLM client for testing."""
 
     def __init__(
         self,
@@ -145,7 +145,7 @@ class MockAsyncLLMClient(BaseLLMClient):
             random.seed(seed)
 
     def _create_mock_response(self, content: str) -> Union[ChatCompletion, Any]:
-        """Create a mock ChatCompletion with the given content."""
+        """Create a mock ChatCompletion."""
         return ChatCompletion(
             id="mock_id",
             object="chat.completion",

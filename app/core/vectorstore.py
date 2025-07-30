@@ -31,17 +31,14 @@ class CollectionInfo:
 
     @property
     def total_documents(self) -> int:
-        """Computed property: total number of documents."""
         return len(self.documents)
 
     @property
     def total_file_size(self) -> int:
-        """Computed property: total file size across all documents."""
         return sum(doc.metadata.get("file_size", 0) or 0 for doc in self.documents)
 
     @property
     def file_types(self) -> Dict[str, int]:
-        """Computed property: count of files by extension."""
         file_types = {}
         for doc in self.documents:
             ext = doc.metadata.get("file_extension", "unknown") or "unknown"
@@ -49,7 +46,6 @@ class CollectionInfo:
         return file_types
 
     def __str__(self) -> str:
-        """String representation for logging."""
         return (
             f"Collection '{self.name}': {self.total_documents} documents, "
             f"{self.total_chunks} chunks, embedding model: {self.embedding_model}"
@@ -63,7 +59,6 @@ class CollectionInfo:
         documents: List[Document],
         total_chunks: int,
     ) -> "CollectionInfo":
-        """Create CollectionInfo from a list of documents and total chunk count."""
         return cls(
             name=name,
             embedding_model=embedding_model,
@@ -74,14 +69,11 @@ class CollectionInfo:
 
 @dataclass
 class AddFilesResult:
-    """Result of adding files to the vector store."""
-
     chunk_ids: Dict[str, List[str]]  # filename -> chunk_ids
     errors: Dict[str, str]  # filename -> error_message
 
     @property
     def total_chunks(self) -> int:
-        """Total number of chunks added."""
         return sum(len(ids) for ids in self.chunk_ids.values())
 
 
@@ -127,7 +119,7 @@ class VectorStore(metaclass=CallbackMeta):
         chunk_size: int = settings.chunk_size,
         chunk_overlap: int = settings.chunk_overlap,
     ) -> List[str]:
-        """Add a document."""
+        """Add a document to the collection."""
         chunks = document.to_chunks(chunk_size=chunk_size, overlap=chunk_overlap)
 
         texts = [chunk.content for chunk in chunks]
@@ -156,7 +148,6 @@ class VectorStore(metaclass=CallbackMeta):
         chunk_size: int = settings.chunk_size,
         chunk_overlap: int = settings.chunk_overlap,
     ) -> List[str]:
-        """Add raw text."""
         document = Document.from_text(text, title=title, source=source)
         return self.add_document(
             document, chunk_size=chunk_size, chunk_overlap=chunk_overlap
@@ -169,7 +160,6 @@ class VectorStore(metaclass=CallbackMeta):
         chunk_size: int = settings.chunk_size,
         chunk_overlap: int = settings.chunk_overlap,
     ) -> List[str]:
-        """Add a file (path or upload)."""
         if isinstance(file, UploadFile):
             document = await Document.from_upload(file)
         else:
@@ -185,7 +175,6 @@ class VectorStore(metaclass=CallbackMeta):
         chunk_size: int = settings.chunk_size,
         chunk_overlap: int = settings.chunk_overlap,
     ) -> AddFilesResult:
-        """Add multiple files."""
         chunk_ids = {}
         errors = {}
         for file in files:
@@ -283,7 +272,7 @@ class VectorStore(metaclass=CallbackMeta):
     def delete_documents(
         self, document_ids: List[str], collection_name: Optional[str] = None
     ) -> int:
-        """Delete documents by document IDs, returns number of chunks deleted."""
+        """Delete documents by document IDs."""
         if collection_name and collection_name != self.collection_name:
             # Create temporary instance for different collection
             temp_store = VectorStore(
@@ -309,7 +298,7 @@ class VectorStore(metaclass=CallbackMeta):
 
     @with_callbacks
     def delete_collection(self, collection_name: Optional[str] = None) -> bool:
-        """Delete the entire collection."""
+        """Delete the collection."""
         self.client.delete_collection(name=collection_name or self.collection_name)
         return True
 

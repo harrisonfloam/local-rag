@@ -7,40 +7,26 @@ from app.core.ingestor import RetrievedDocumentChunk
 
 
 class MessageMetadata(BaseModel):
-    """Metadata for chat messages."""
-
     timestamp: str = Field(default_factory=lambda: datetime.datetime.now().isoformat())
 
     # For user messages
-    request_params: Optional[Dict[str, Any]] = Field(
-        default=None, description="Request parameters used"
-    )
+    request_params: Optional[Dict[str, Any]] = None
 
     # For assistant messages
-    response_data: Optional[Dict[str, Any]] = Field(
-        default=None, description="Full API response"
-    )
-    response_time: Optional[float] = Field(
-        default=None, description="Response time in seconds"
-    )
-    model: Optional[str] = Field(default=None, description="Model used")
-    usage: Optional[Dict[str, Any]] = Field(default=None, description="Token usage")
-    finish_reason: Optional[str] = Field(
-        default=None, description="How the response ended"
-    )
-    sources: Optional[List[RetrievedDocumentChunk]] = Field(
-        default=[], description="RAG sources"
-    )
+    response_data: Optional[Dict[str, Any]] = None
+    response_time: Optional[float] = None
+    model: Optional[str] = None
+    usage: Optional[Dict[str, Any]] = None
+    finish_reason: Optional[str] = None
+    sources: Optional[List[RetrievedDocumentChunk]] = []
 
 
 class ChatMessageWithMetadata(BaseModel):
     """Enhanced chat message with OpenAI compatibility."""
 
-    role: str = Field(..., description="Message role (user/assistant/system)")
-    content: str = Field(..., description="Message content")
-    metadata: MessageMetadata = Field(
-        default_factory=MessageMetadata, description="Message metadata"
-    )
+    role: str
+    content: str
+    metadata: MessageMetadata = Field(default_factory=MessageMetadata)
 
     def to_openai_format(self) -> Dict[str, str]:
         """Convert to OpenAI API format (just role + content)."""

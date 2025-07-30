@@ -53,7 +53,7 @@ class Document(BaseModel):
     def from_chunk_metadata(
         cls, document_id: str, metadata: Dict[str, Any]
     ) -> "Document":
-        """Reconstruct a Document from chunk metadata stored in ChromaDB."""
+        """Reconstruct Document from chunk metadata."""
         # Filter out chunk-specific and chunking-process metadata
         document_metadata = {
             key: value
@@ -148,7 +148,7 @@ class DocumentChunk(BaseModel):
 
     @property
     def chroma_metadata(self) -> Dict[str, Any]:
-        """Get metadata dict for ChromaDB storage (includes all important fields)."""
+        """Get metadata for ChromaDB storage."""
         return {
             **self.metadata,  # Original document metadata + chunking params
             "chunk_id": self.id,
@@ -162,7 +162,7 @@ class DocumentChunk(BaseModel):
 
 
 class RetrievedDocumentChunk(DocumentChunk):
-    """DocumentChunk with retrieval score - returned from vector search."""
+    """DocumentChunk with retrieval score."""
 
     score: float = Field(..., description="Relevance score (0.0 to 1.0)")
 
