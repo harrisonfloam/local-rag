@@ -283,19 +283,31 @@ class VectorStore(metaclass=CallbackMeta):
 
     @with_callbacks
     def delete_documents(
-        self, ids: List[str], collection_name: Optional[str] = None
-    ) -> bool:
-        """Delete documents by IDs."""
+        self, document_ids: List[str], collection_name: Optional[str] = None
+    ) -> int:
+        """Delete documents by document IDs, returns number of chunks deleted."""
         if collection_name and collection_name != self.collection_name:
             # Create temporary instance for different collection
             temp_store = VectorStore(
                 collection_name=collection_name,
                 embedding_model=self.embedding_model,
             )
-            return temp_store.delete_documents(ids)
+            return temp_store.delete_documents(document_ids)
 
-        self.collection.delete(ids=ids)
-        return True
+        # Find all chunks for these documents
+        results = self.collection.get(include=["metadatas"])
+        metadatas = results.get("metadatas", []) or []
+        ids = results.get("ids", []) or []
+
+        chunk_ids_to_delete = []
+        for chunk_id, meta in zip(ids, metadatas):
+            if meta and meta.get("document_id") in document_ids:
+                chunk_ids_to_delete.append(chunk_id)
+
+        if chunk_ids_to_delete:
+            self.collection.delete(ids=chunk_ids_to_delete)
+
+        return len(chunk_ids_to_delete)
 
     @with_callbacks
     def delete_collection(self, collection_name: Optional[str] = None) -> bool:
@@ -357,15 +369,15 @@ class VectorStore(metaclass=CallbackMeta):
 
     def _post_delete_documents(
         self,
-        result: bool,
+        result: int,
         duration: float,
-        ids: List[str],
+        document_ids: List[str],
         collection_name: Optional[str] = None,
         *args,
         **kwargs,
     ):
         target_collection = collection_name or self.collection_name
         logger.info(
-            f"Deleted {len(ids)} documents from collection '{target_collection}' in {duration:.4f}s"
+            f"Deleted {len(document_ids)} documents ({result} chunks) from collection '{target_collection}' in {duration:.4f}s"
         )
         return result

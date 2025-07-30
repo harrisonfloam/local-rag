@@ -1,8 +1,8 @@
 # Request models
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from openai.types.chat import ChatCompletion
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.core.ingestor import Document, RetrievedDocumentChunk
 from app.core.prompts import RAG_SYSTEM_PROMPT
@@ -125,6 +125,28 @@ class IngestResponse(BaseModel):
             return "failed"
         else:
             return "completed"
+
+
+# Document deletion endpoint
+class DeleteRequest(BaseModel):
+    """Flexible delete request supporting multiple deletion scenarios."""
+
+    document_ids: Optional[List[str]] = Field(
+        default=None,
+        description="Document IDs - deletes all chunks from these documents",
+    )
+    collection_name: Optional[str] = Field(
+        default=None, description="Target collection (defaults to current)"
+    )
+    delete_collection: bool = Field(
+        default=False, description="Delete the entire collection"
+    )
+
+    @model_validator(mode="after")
+    def validate_deletion_request(self):
+        if not self.document_ids and not self.delete_collection:
+            raise ValueError("Must specify document_ids or delete_collection")
+        return self
 
 
 # Document listing endpoint

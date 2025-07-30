@@ -9,6 +9,7 @@ from app.api.schemas import (
     ChatCompletionWithSources,
     ChatRequest,
     CollectionInfoResponse,
+    DeleteRequest,
     IngestRequest,
     IngestResponse,
     RetrieveRequest,
@@ -151,6 +152,27 @@ async def list_documents():
     )
 
     return response
+
+
+@router.delete("/documents", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_documents(request: DeleteRequest):
+    """Delete documents or collections."""
+    vectorstore = VectorStore(
+        collection_name=request.collection_name or settings.collection_name
+    )
+
+    try:
+        # If delete_collection is True, always delete collection (overrides document_ids)
+        if request.delete_collection:
+            vectorstore.delete_collection(request.collection_name)
+        elif request.document_ids:
+            vectorstore.delete_documents(request.document_ids, request.collection_name)
+
+    except Exception as e:
+        logger.error(f"Delete operation failed: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Delete operation failed: {str(e)}"
+        )
 
 
 @router.get("/models")
