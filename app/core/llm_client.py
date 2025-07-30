@@ -14,6 +14,7 @@ from openai.types.chat.chat_completion import Choice
 
 from app.settings import settings
 from app.utils.callbacks import CallbackMeta, with_callbacks
+from app.utils.utils import truncate_long_strings
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,10 @@ class BaseLLMClient(ABC, metaclass=CallbackMeta):
 
     def _pre_chat(self, *args, **kwargs):
         payload = {**kwargs, **dict(enumerate(args))}
-        logger.debug(f"Chat request:\n{json.dumps(payload, indent=2, default=str)}")
+        truncated_payload = truncate_long_strings(payload)
+        logger.debug(
+            f"Chat request:\n{json.dumps(truncated_payload, indent=2, default=str)}"
+        )
 
     def _post_chat(self, result, duration, *args, **kwargs):
         try:
@@ -43,6 +47,7 @@ class BaseLLMClient(ABC, metaclass=CallbackMeta):
             )
         except Exception:
             result_dump = str(result)
+        result_dump = truncate_long_strings(result_dump)
         logger.debug(
             f"Chat response in {duration:.4f}s:\n{json.dumps(result_dump, indent=2, default=str)}"
         )

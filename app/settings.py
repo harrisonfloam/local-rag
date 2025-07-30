@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     # Logging settings
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     dep_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "WARNING"
+    string_max_length: int = 300  # Max length for string truncation in logs
 
     @property
     def logging_config(self) -> dict:
