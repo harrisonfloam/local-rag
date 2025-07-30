@@ -134,13 +134,16 @@ def render_chat_metrics():
 
                     st.caption(f"Output tokens: {completion_tokens:,} {delta_text}")
 
-            # with col4:
-            #     sources_count = (
-            #         len(last_msg.metadata.sources) if last_msg.metadata.sources else 0
-            #     )
-            #     st.caption(
-            #         f"RAG Sources: {sources_count if sources_count > 0 else 'None'}"
-            #     )
+            if st.session_state.use_rag:
+                with col4:
+                    sources_count = (
+                        len(last_msg.metadata.sources)
+                        if last_msg.metadata.sources
+                        else 0
+                    )
+                    st.caption(
+                        f"RAG Sources: {sources_count if sources_count > 0 else 'None'}"
+                    )
     else:
         st.caption(f"Model: {st.session_state.completion_model}")
 

@@ -5,10 +5,12 @@ services:
     build: .
     image: local-rag:latest
     ports:
-      - "8501:8501"
+      - "8501:8501"  # Streamlit UI
+      - "8100:8100"  # FastAPI Backend
     environment:
       - APP_OLLAMA_HOST=ollama
       - APP_CHROMA_HOST=chromadb
+      
       # Dev settings
       - APP_DEV_MODE=true
       - APP_DEBUG=true
@@ -16,6 +18,7 @@ services:
       - APP_MOCK_LLM=true
       - APP_USE_RAG=false
       - APP_RELOAD=true
+      - APP_HTTPX_TIMEOUT=60
     volumes:
       - ./app:/local-rag/app
       - ./ui:/local-rag/ui
