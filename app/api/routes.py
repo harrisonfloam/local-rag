@@ -19,7 +19,6 @@ from app.core.llm_client import AsyncOllamaLLMClient, MockAsyncLLMClient
 from app.core.prompts import RAG_USER_PROMPT
 from app.core.vectorstore import VectorStore
 from app.settings import settings
-from app.utils.utils import truncate_long_strings
 
 logger = logging.getLogger(__name__)
 

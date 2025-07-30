@@ -4,12 +4,10 @@ from typing import Dict, List, Optional, Sequence, Union
 
 import chromadb
 from attr import dataclass
-from chromadb.api.types import Metadata
-from chromadb.errors import InvalidDimensionException
 from chromadb.utils import embedding_functions
 from starlette.datastructures import UploadFile
 
-from app.core.ingestor import Document, DocumentChunk, RetrievedDocumentChunk
+from app.core.ingestor import Document, RetrievedDocumentChunk
 from app.settings import settings
 from app.utils.callbacks import CallbackMeta, with_callbacks
 
