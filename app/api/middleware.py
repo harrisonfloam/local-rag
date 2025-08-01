@@ -32,9 +32,18 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             duration = time.time() - start_time
 
-            logger.info(
-                f"{request.method} {endpoint} {response.status_code} completed in {duration:.4f}s"
-            )
+            # Handle streaming responses differently
+            if hasattr(response, "__class__") and "StreamingResponse" in str(
+                response.__class__
+            ):
+                # This is a streaming response, don't log total time as it's misleading
+                logger.info(
+                    f"{request.method} {endpoint} {response.status_code} stream started in {duration:.4f}s"
+                )
+            else:
+                logger.info(
+                    f"{request.method} {endpoint} {response.status_code} completed in {duration:.4f}s"
+                )
             return response
 
         except HTTPException as e:
