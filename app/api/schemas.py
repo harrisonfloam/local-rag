@@ -10,6 +10,12 @@ from app.settings import settings
 
 
 # Chat endpoint
+class DevSettings(BaseModel):
+    use_rag: bool = True
+    mock_llm: bool = settings.mock_llm
+    stream: bool = settings.stream
+
+
 class ChatRequest(BaseModel):
     messages: List[Dict[str, str]]
     system_prompt: str = RAG_SYSTEM_PROMPT
@@ -17,9 +23,7 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=settings.temperature, ge=0.0, le=2.0)
     embedding_model: str = settings.embedding_model_name
     top_k: int = Field(default=settings.top_k, ge=1)
-    # TODO: put dev settings in a subclass
-    use_rag: bool = True
-    mock_llm: bool = settings.mock_llm
+    dev: DevSettings = Field(default_factory=DevSettings)
 
 
 class ChatCompletionWithSources(ChatCompletion):

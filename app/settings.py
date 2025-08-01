@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     ollama_port: int = 11434
     model_name: str = "llama3.2:1b"
     temperature: float = 0.7
-    async_llm: bool = False  # Use async LLM calls
+    stream: bool = False  # Stream chat responses
     mock_llm: bool = False  # DEV: Use a mock LLM for testing purposes
     # TODO: conversation memory settings
 

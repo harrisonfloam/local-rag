@@ -101,6 +101,43 @@ class AsyncOpenAILLMClient(BaseLLMClient):
         response = await self.client.chat.completions.create(stream=False, **payload)
         return response
 
+    async def stream(
+        self,
+        messages: list[ChatMessage],
+        model: str = settings.model_name,
+        temperature: float = settings.temperature,
+        **kwargs,
+    ):
+        """Generate streaming response with full response at end."""
+        completion_stream = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,  # type: ignore
+            temperature=temperature,
+            stream=True,
+            **kwargs,
+        )
+
+        content_chunks = []
+        finish_reason = "stop"
+
+        async for chunk in completion_stream:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                content_chunks.append(content)
+                yield content
+            if chunk.choices[0].finish_reason:
+                finish_reason = chunk.choices[0].finish_reason
+
+        # Yield complete response object
+        full_content = "".join(content_chunks)
+        yield {
+            "choices": [
+                {"message": {"content": full_content}, "finish_reason": finish_reason}
+            ],
+            "model": model,
+            "usage": {"prompt_tokens": 0, "completion_tokens": len(content_chunks)},
+        }
+
 
 class OllamaLLMClient(OpenAILLMClient):
     """Ollama client using OpenAI-compatible API."""
@@ -187,3 +224,30 @@ class MockAsyncLLMClient(BaseLLMClient):
             content = mock_responses[abs(self.response_type) % len(mock_responses)]
 
         return self._create_mock_response(content)
+
+    async def stream(
+        self,
+        messages: list[ChatMessage],
+        model: str = settings.model_name,
+        temperature: float = settings.temperature,
+        **kwargs,
+    ):
+        """Generate a mock streaming response."""
+        user_message = messages[-1]["content"] if messages else "Hello"
+        mock_response = (
+            f"This is a mock streaming response about '{user_message}' from {model}."
+        )
+
+        word_count = 0
+        for word in mock_response.split():
+            yield f"{word} "
+            word_count += 1
+
+        # Yield complete response object
+        yield {
+            "choices": [
+                {"message": {"content": mock_response}, "finish_reason": "stop"}
+            ],
+            "model": model,
+            "usage": {"prompt_tokens": 0, "completion_tokens": word_count},
+        }

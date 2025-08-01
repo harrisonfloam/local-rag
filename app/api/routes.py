@@ -4,6 +4,7 @@ from typing import List
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 
 from app.api.schemas import (
     ChatCompletionWithSources,
@@ -33,15 +34,15 @@ async def health_check():
 @router.post("/chat")
 async def chat(request: ChatRequest):
     """Chat with the RAG system."""
-    # TODO: remake this with streaming
-    if request.mock_llm:
+    # Initialize LLM client once
+    if request.dev.mock_llm:
         llm = MockAsyncLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
     else:
         llm = AsyncOllamaLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
 
     # Retrieve context
     retrieve_response = None
-    if request.use_rag:
+    if request.dev.use_rag:
         query = request.messages[-1]["content"]
         # TODO: add summary of conversation history to query? core request? param to toggle this?
         # a new system prompt that takes the summarized conversation history
@@ -60,15 +61,19 @@ async def chat(request: ChatRequest):
     # Process conversation history
     # TODO: conversation memory scheme
     previous_messages = request.messages[:-1]
-
     messages = (
-        [
-            {"role": "system", "content": request.system_prompt}
-        ]  # TODO: system prompt at the top? or before latest message?
+        [{"role": "system", "content": request.system_prompt}]
         + previous_messages
         + [user_message]
     )
 
+    if request.dev.stream:
+        return StreamingResponse(
+            chat_stream_generator(llm, messages, request, retrieve_response),
+            media_type="text/plain",
+        )
+
+    # Regular response
     response = await llm.chat(
         messages=messages,
         model=request.model,
@@ -79,6 +84,31 @@ async def chat(request: ChatRequest):
         sources=retrieve_response.results if retrieve_response else [],
         **response.model_dump(),
     )
+
+
+async def chat_stream_generator(llm, messages, request, retrieve_response):
+    """Generate streaming chat responses with SSE-style format."""
+    final_response = None
+
+    async for chunk in llm.stream(
+        messages=messages,
+        model=request.model,
+        temperature=request.temperature,
+    ):
+        # Final response object
+        if isinstance(chunk, dict):
+            final_response = chunk
+            # Add sources
+            if retrieve_response:
+                final_response["sources"] = [
+                    chunk.model_dump() for chunk in retrieve_response.results
+                ]
+        else:
+            # Stream content with SSE-style format
+            yield f"data: {chunk}\n\n"
+    # TODO: log the response
+    if final_response:
+        yield f"event: final\ndata: {json.dumps(final_response)}\n\n"
 
 
 @router.post("/retrieve")
