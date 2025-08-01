@@ -65,3 +65,47 @@ class ChatMessageWithMetadata(BaseModel):
                 sources=response_data.get("sources", []),
             ),
         )
+
+    @classmethod
+    def from_stream(
+        cls,
+        content: str,
+        model: str,
+        response_time: Optional[float] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> "ChatMessageWithMetadata":
+        """Create assistant message from streaming response."""
+        # Use metadata if available, otherwise create mock data
+        if metadata:
+            usage = metadata.get("usage", {"prompt_tokens": 0, "completion_tokens": 0})
+            finish_reason = metadata.get("finish_reason", "stop")
+            sources = metadata.get("sources", [])
+            model_name = metadata.get("model", model)
+        else:
+            usage = {"prompt_tokens": 0, "completion_tokens": 0}
+            finish_reason = "stop"
+            sources = []
+            model_name = model
+
+        return cls(
+            role="assistant",
+            content=content,
+            metadata=MessageMetadata(
+                response_data={
+                    "choices": [
+                        {
+                            "message": {"content": content},
+                            "finish_reason": finish_reason,
+                        }
+                    ],
+                    "model": model_name,
+                    "usage": usage,
+                    "sources": sources,
+                },
+                response_time=response_time,
+                model=model_name,
+                usage=usage,
+                finish_reason=finish_reason,
+                sources=sources,
+            ),
+        )

@@ -14,6 +14,7 @@ def init_session_state():
     session_state_defaults = {
         "mock_llm": settings.mock_llm,
         "mock_rag_response": settings.mock_rag_response,
+        "stream": settings.stream,
         "model_info": None,
         "completion_models": [],
         "embedding_models": [],
@@ -31,10 +32,13 @@ def get_chat_request_params() -> Dict[str, Any]:
         "temperature": st.session_state.temperature,
         "embedding_model": st.session_state.embedding_model,
         "top_k": st.session_state.top_k,
-        "use_rag": st.session_state.use_rag,
-        "mock_llm": st.session_state.mock_llm,
+        "dev": {
+            "use_rag": st.session_state.use_rag,
+            "mock_llm": st.session_state.mock_llm,
+            "stream": st.session_state.stream,
+        },
     }
 
 
-def get_ingest_request_params() -> Dict[str, Any]:
+def get_ingest_request_params():
     pass

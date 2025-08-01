@@ -1,3 +1,4 @@
+import json
 import time
 
 import httpx
@@ -37,30 +38,95 @@ def handle_chat_input(chat_container):
                 st.markdown(prompt)  # Display user message
             with st.chat_message("assistant"):
                 with st.spinner("Thinking...", show_time=True):
+                    # TODO: close spinner when streaming starts...
                     try:
-                        # Get LLM response
-                        response_data, response_time = get_chat_response(chat_request)
-                        # TODO: handle truncation check
-
-                        llm_message = response_data["choices"][0]["message"]["content"]
-                        # TODO: extract sources, etc
-
-                        st.markdown(llm_message)
-
-                        assistant_message = (
-                            ChatMessageWithMetadata.from_assistant_response(
-                                content=llm_message,
-                                response_data=response_data,
-                                response_time=response_time,
+                        if chat_request.dev.stream:
+                            # Handle streaming response
+                            stream_gen, response_time, final_response_ref = (
+                                get_chat_stream(chat_request)
                             )
-                        )
+                            llm_message = st.write_stream(stream_gen)
+                            # Ensure llm_message is a string
+                            if isinstance(llm_message, list):
+                                llm_message = "".join(llm_message)
+
+                            # Use final response if available, otherwise create from stream
+                            final_response = final_response_ref["data"]
+                            if final_response:
+                                assistant_message = (
+                                    ChatMessageWithMetadata.from_assistant_response(
+                                        content=str(llm_message),
+                                        response_data=final_response,
+                                        response_time=response_time,
+                                    )
+                                )
+                            else:
+                                assistant_message = ChatMessageWithMetadata.from_stream(
+                                    content=str(llm_message),
+                                    model=chat_request.model,
+                                    response_time=response_time,
+                                )
+                        else:
+                            # Handle regular response
+                            response_data, response_time = get_chat_response(
+                                chat_request
+                            )
+                            llm_message = response_data["choices"][0]["message"][
+                                "content"
+                            ]
+                            st.markdown(llm_message)
+                            assistant_message = (
+                                ChatMessageWithMetadata.from_assistant_response(
+                                    content=llm_message,
+                                    response_data=response_data,
+                                    response_time=response_time,
+                                )
+                            )
+
                         st.session_state.messages.append(assistant_message.model_dump())
 
                     except Exception as e:
                         st.error(f"Error: {e}")
 
 
+def get_chat_stream(request: ChatRequest):
+    """Get streaming chat response with real-time SSE parsing."""
+    start_time = time.time()
+
+    # Shared state for final response (mutable reference)
+    final_response_ref = {"data": None}
+
+    def streaming_generator():
+        with httpx.Client(timeout=settings.httpx_timeout) as client:
+            with client.stream(
+                "POST", f"{settings.api_url}/chat", json=request.model_dump()
+            ) as response:
+                response.raise_for_status()
+
+                expecting_final_data = False
+
+                for line in response.iter_lines():
+                    if line.startswith("data: "):
+                        if expecting_final_data:
+                            # Parse final response and store in shared state
+                            try:
+                                final_response_ref["data"] = json.loads(line[6:])
+                            except Exception:
+                                pass
+                            expecting_final_data = False
+                        else:
+                            # Yield content immediately for real-time streaming
+                            content = line[6:]  # Remove "data: " prefix
+                            yield content
+                    elif line == "event: final":
+                        expecting_final_data = True
+
+    response_time = time.time() - start_time
+    return streaming_generator(), response_time, final_response_ref
+
+
 def get_chat_response(request: ChatRequest):
+    """Get regular chat response."""
     start_time = time.time()
     with httpx.Client(timeout=settings.httpx_timeout) as client:
         chat_response = client.post(
@@ -68,8 +134,8 @@ def get_chat_response(request: ChatRequest):
             json=request.model_dump(),
         )
         chat_response.raise_for_status()
-    response_time = time.time() - start_time
-    return chat_response.json(), response_time
+        response_time = time.time() - start_time
+        return chat_response.json(), response_time
 
 
 def render_chat_metrics():

@@ -162,9 +162,19 @@ def render_checkboxes():
                 value=settings.mock_rag_response,
                 # help="Use a mock RAG response for testing purposes",
             )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            stream = st.checkbox(
+                "Stream",
+                key="stream",
+                value=settings.stream,
+                # help="Stream chat responses",
+            )
     else:
         st.session_state.mock_llm = settings.mock_llm
         st.session_state.mock_rag_response = settings.mock_rag_response
+        st.session_state.stream = settings.stream
 
 
 def render_model_selection():
