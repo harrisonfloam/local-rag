@@ -8,7 +8,7 @@ from ui.utils.session_state import init_session_state
 from ui.utils.title import render_dynamic_title
 
 st.set_page_config(
-    page_title="local-rag",
+    page_title="local-rag/chat",
     page_icon="💬",
     layout="wide",
 )

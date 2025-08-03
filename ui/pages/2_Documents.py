@@ -7,7 +7,7 @@ from ui.components.document_portal import (
 from ui.components.startup import run_startup_actions
 from ui.utils.title import render_dynamic_title
 
-st.set_page_config(page_title="📁 Documents", page_icon="📁", layout="wide")
+st.set_page_config(page_title="local-rag/documents", page_icon="📁", layout="wide")
 
 render_dynamic_title("documents")
 run_startup_actions()
