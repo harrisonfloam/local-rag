@@ -1,7 +1,5 @@
-import httpx
 import streamlit as st
 
-from app.api.schemas import IngestRequest
 from app.core.prompts import RAG_SYSTEM_PROMPT
 from app.settings import settings
 
@@ -18,26 +16,6 @@ def render_sidebar():
         st.markdown("---")
         render_model_selection()
         render_param_selection()
-
-
-def fetch_models():
-    # Fetch available models
-    if st.session_state.model_info is None:
-        try:
-            with httpx.Client(timeout=settings.httpx_timeout) as client:
-                response = client.get(f"{settings.api_url}/models")
-                response.raise_for_status()
-                model_info = response.json()
-        except Exception:
-            st.warning("Error fetching models.")
-            model_info = {
-                "models": [settings.model_name, settings.embedding_model_name],
-                "completion_models": [settings.model_name],
-                "embedding_models": [settings.embedding_model_name],
-            }
-        st.session_state.model_info = model_info
-        st.session_state.completion_models = model_info.get("completion_models", [])
-        st.session_state.embedding_models = model_info.get("embedding_models", [])
 
 
 def render_checkboxes():

@@ -4,12 +4,13 @@ from ui.components.document_portal import (
     render_document_browser,
     render_upload_interface,
 )
+from ui.components.startup import run_startup_actions
 from ui.utils.title import render_dynamic_title
 
 st.set_page_config(page_title="📁 Documents", page_icon="📁", layout="wide")
 
-# Dynamic title with themed colors
 render_dynamic_title("documents")
+run_startup_actions()
 
 tab1, tab2 = st.tabs(["🔍 Browse & Manage", "📤 Upload"])
 
