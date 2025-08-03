@@ -37,56 +37,57 @@ def handle_chat_input(chat_container):
             with st.chat_message("user"):
                 st.markdown(prompt)  # Display user message
             with st.chat_message("assistant"):
-                with st.spinner("Thinking...", show_time=True):
-                    # TODO: close spinner when streaming starts...
-                    try:
-                        if chat_request.dev.stream:
-                            # Handle streaming response
+                try:
+                    if chat_request.dev.stream:
+                        # Handle streaming response
+                        with st.spinner("Thinking...", show_time=True):
                             stream_gen, response_time, final_response_ref = (
                                 get_chat_stream(chat_request)
                             )
-                            llm_message = st.write_stream(stream_gen)
-                            # Ensure llm_message is a string
-                            if isinstance(llm_message, list):
-                                llm_message = "".join(llm_message)
+                        # Spinner closes here, now start streaming
+                        llm_message = st.write_stream(stream_gen)
+                        # Ensure llm_message is a string
+                        if isinstance(llm_message, list):
+                            llm_message = "".join(llm_message)
 
-                            # Use final response if available, otherwise create from stream
-                            final_response = final_response_ref["data"]
-                            if final_response:
-                                assistant_message = (
-                                    ChatMessageWithMetadata.from_assistant_response(
-                                        content=str(llm_message),
-                                        response_data=final_response,
-                                        response_time=response_time,
-                                    )
-                                )
-                            else:
-                                assistant_message = ChatMessageWithMetadata.from_stream(
+                        # Use final response if available, otherwise create from stream
+                        final_response = final_response_ref["data"]
+                        if final_response:
+                            assistant_message = (
+                                ChatMessageWithMetadata.from_assistant_response(
                                     content=str(llm_message),
-                                    model=chat_request.model,
+                                    response_data=final_response,
                                     response_time=response_time,
                                 )
+                            )
                         else:
-                            # Handle regular response
+                            assistant_message = ChatMessageWithMetadata.from_stream(
+                                content=str(llm_message),
+                                model=chat_request.model,
+                                response_time=response_time,
+                            )
+                    else:
+                        # Handle regular response
+                        with st.spinner("Thinking...", show_time=True):
                             response_data, response_time = get_chat_response(
                                 chat_request
                             )
                             llm_message = response_data["choices"][0]["message"][
                                 "content"
                             ]
-                            st.markdown(llm_message)
-                            assistant_message = (
-                                ChatMessageWithMetadata.from_assistant_response(
-                                    content=llm_message,
-                                    response_data=response_data,
-                                    response_time=response_time,
-                                )
+                        st.markdown(llm_message)
+                        assistant_message = (
+                            ChatMessageWithMetadata.from_assistant_response(
+                                content=llm_message,
+                                response_data=response_data,
+                                response_time=response_time,
                             )
+                        )
 
-                        st.session_state.messages.append(assistant_message.model_dump())
+                    st.session_state.messages.append(assistant_message.model_dump())
 
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
 
 def get_chat_stream(request: ChatRequest):
