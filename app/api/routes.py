@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List
+from typing import List, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -159,10 +159,11 @@ async def ingest_documents(
 
 
 @router.get("/documents", response_model=CollectionInfoResponse)
-async def list_documents():
+async def list_documents(collection_name: Optional[str] = settings.collection_name):
     """List all documents in the vectorstore."""
+
     vectorstore = VectorStore(
-        collection_name=settings.collection_name,
+        collection_name=collection_name,
         embedding_model=settings.embedding_model_name,
     )
 
@@ -177,7 +178,7 @@ async def list_documents():
     )
 
     logger.debug(
-        f"Documents list response:\n{json.dumps(response.model_dump(), indent=2, default=str)}"
+        f"Documents list response for collection '{collection_name}':\n{json.dumps(response.model_dump(), indent=2, default=str)}"
     )
 
     return response

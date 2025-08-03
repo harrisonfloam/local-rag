@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     # Frontend settings
     dev_mode: bool = False  # Enable additional options in the UI
     use_rag: bool = True  # Use RAG context in the chat
+    app_title: str = "local-rag"  # Main application title
 
     @property
     def chroma_url(self) -> str:

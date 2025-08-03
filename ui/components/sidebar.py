@@ -9,14 +9,11 @@ from app.settings import settings
 def render_sidebar():
     """
     Sidebar contains:
-    - File upload for documents
     - Model selection
     - Hyperparameter selection
     - Dev mode options
     """
     with st.sidebar:
-        render_file_upload()
-        st.markdown("---")
         render_checkboxes()
         st.markdown("---")
         render_model_selection()
@@ -41,91 +38,6 @@ def fetch_models():
         st.session_state.model_info = model_info
         st.session_state.completion_models = model_info.get("completion_models", [])
         st.session_state.embedding_models = model_info.get("embedding_models", [])
-
-
-def render_file_upload():
-    @st.dialog("File upload", width="large")
-    def render_file_upload_modal():
-        uploaded_files = st.file_uploader(
-            "Upload documents",
-            type=["pdf", "txt", "docx", "md"],
-            accept_multiple_files=True,
-            key="file_uploader",
-        )
-        collection_name = st.text_input(
-            "Collection Name",
-            key="collection_name",
-            value=settings.collection_name,
-        )
-        # TODO: get existing collection names?
-        col1, col2 = st.columns(2)
-        with col1:
-            chunk_size = st.number_input(
-                "Chunk Size",
-                key="chunk_size",
-                min_value=0,
-                max_value=1024,
-                value=settings.chunk_size,
-                step=5,
-            )
-        with col2:
-            chunk_overlap = st.number_input(
-                "Chunk Overlap",
-                key="chunk_overlap",
-                min_value=0,
-                max_value=1024,
-                value=settings.chunk_overlap,
-                step=5,
-            )
-        ingest_button = st.button("Embed", disabled=not uploaded_files)
-
-        # Handle ingest button click
-        if ingest_button and uploaded_files:
-            with st.spinner(f"Embedding {len(uploaded_files)} files..."):
-                try:
-                    ingest_request = IngestRequest(
-                        collection_name=st.session_state.collection_name,
-                        embedding_model=st.session_state.embedding_model,
-                        chunk_size=st.session_state.chunk_size,
-                        chunk_overlap=st.session_state.chunk_overlap,
-                    )
-
-                    # Call ingest endpoint
-                    with httpx.Client(timeout=settings.httpx_timeout) as client:
-                        # Unpack streamlit UploadedFiles
-                        files_data = [
-                            ("files", (file.name, file.getvalue(), file.type))
-                            for file in uploaded_files
-                        ]
-
-                        response = client.post(
-                            f"{settings.api_url}/documents/ingest",
-                            files=files_data,
-                            data=ingest_request.model_dump(),
-                        )
-                        response.raise_for_status()
-                        response_data = response.json()
-                    print(response_data)
-                    # Report results
-                    if response_data["status"] == "success":
-                        st.toast(
-                            f"Embedded {response_data['total_files']} files as {response_data['total_chunks']} chunks."
-                        )
-                    if response_data["status"] == "partial":
-                        st.toast(
-                            f"Embedded {response_data['successful_files']} files with {response_data['total_chunks']} chunks. {response_data['total_errors']} errors."
-                        )
-
-                    # st.rerun()
-
-                except Exception as e:
-                    st.toast(f"Error during ingestion: {e}")
-
-                finally:
-                    st.rerun()
-
-    if st.button("Upload Files", key="file_upload_button"):
-        render_file_upload_modal()
 
 
 def render_checkboxes():
