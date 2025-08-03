@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import Dict, List, Optional
 
 import httpx
@@ -8,6 +9,24 @@ from app.settings import settings
 
 # Document portal functions converted for use in dedicated page
 # Used by ui/pages/1_Documents.py
+
+
+@contextmanager
+def http_client():
+    """Context manager for HTTP client with standard timeout."""
+    with httpx.Client(timeout=settings.httpx_timeout) as client:
+        yield client
+
+
+def clear_collection_cache():
+    """Clear collection cache to force refresh."""
+    if "current_collection_info" in st.session_state:
+        del st.session_state["current_collection_info"]
+
+
+def handle_api_error(action: str, error: Exception):
+    """Standard error handling for API calls."""
+    st.error(f"❌ Error {action}: {error}")
 
 
 def render_document_browser():
@@ -132,12 +151,6 @@ def _render_document_list_with_checkboxes(collection_info: Dict, collection_name
 
     # Store selected documents in session state
     st.session_state.selected_documents = selected_docs
-
-
-# Remove the old functions we're replacing
-def _render_terminal_document_list(collection_info: Dict, collection_name: str):
-    """Legacy function - replaced by _render_document_list_with_checkboxes"""
-    pass
 
 
 def render_upload_interface():
@@ -279,8 +292,10 @@ def _handle_document_deletion(
         )
 
         with httpx.Client(timeout=settings.httpx_timeout) as client:
-            response = client.delete(
-                f"{settings.api_url}/documents", json=delete_request.model_dump()
+            response = client.request(
+                "DELETE",
+                f"{settings.api_url}/documents",
+                json=delete_request.model_dump(),
             )
             response.raise_for_status()
 
@@ -307,8 +322,10 @@ def _handle_collection_deletion(collection_name: str):
             )
 
             with httpx.Client(timeout=settings.httpx_timeout) as client:
-                response = client.delete(
-                    f"{settings.api_url}/documents", json=delete_request.model_dump()
+                response = client.request(
+                    "DELETE",
+                    f"{settings.api_url}/documents",
+                    json=delete_request.model_dump(),
                 )
                 response.raise_for_status()
 
