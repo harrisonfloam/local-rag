@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     def ollama_url(self) -> str:
         return f"http://{self.ollama_host}:{self.ollama_port}/v1"
 
+    def openai_url(self) -> str:
+        return self.ollama_url
+
     @property
     def ollama_base_url(self) -> str:
         return f"http://{self.ollama_host}:{self.ollama_port}"
