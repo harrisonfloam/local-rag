@@ -33,10 +33,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
 
             # Handle streaming responses differently
-            if hasattr(response, "__class__") and "StreamingResponse" in str(
-                response.__class__
-            ):
-                # This is a streaming response, don't log total time as it's misleading
+            if response.__class__.__name__ == "StreamingResponse":
                 logger.info(
                     f"{request.method} {endpoint} {response.status_code} stream started in {duration:.4f}s"
                 )
