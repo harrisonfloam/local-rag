@@ -12,6 +12,7 @@ def init_session_state():
     ensuring that necessary keys are present with default values.
     """
     session_state_defaults = {
+        "dev_mode": settings.dev_mode,
         "mock_llm": settings.mock_llm,
         "mock_rag_response": settings.mock_rag_response,
         "stream": settings.stream,
@@ -30,7 +31,6 @@ def get_chat_request_params() -> Dict[str, Any]:
         "model": st.session_state.completion_model,
         "system_prompt": st.session_state.system_prompt,
         "temperature": st.session_state.temperature,
-        "embedding_model": st.session_state.embedding_model,
         "top_k": st.session_state.top_k,
         "dev": {
             "use_rag": st.session_state.use_rag,

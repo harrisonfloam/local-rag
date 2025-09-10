@@ -84,14 +84,6 @@ def render_model_selection():
             )
         ),
     )
-    embedding_model = st.selectbox(
-        "Embedding model",
-        key="embedding_model",
-        options=st.session_state.embedding_models,
-        index=0
-        if settings.embedding_model_name not in st.session_state.embedding_models
-        else st.session_state.embedding_models.index(settings.embedding_model_name),
-    )
 
 
 def render_param_selection():
