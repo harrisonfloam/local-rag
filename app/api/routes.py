@@ -71,6 +71,7 @@ async def chat(request: ChatRequest):
         return StreamingResponse(
             chat_stream_generator(llm, messages, request, retrieve_response),
             media_type="text/plain",
+            headers={"X-Stream-Response": "true"},
         )
 
     # Regular response
@@ -116,7 +117,7 @@ async def retrieve(request: RetrieveRequest):
     """Retrieve relevant documents based on a query."""
     vectorstore = VectorStore(
         collection_name=settings.collection_name,
-        embedding_model=settings.embedding_model_name,
+        embedding_model=settings.embedding_model_name,  # TODO: this should use the embedding model that the collection uses...
     )
 
     results = vectorstore.search(query=request.query, k=request.top_k)
@@ -159,7 +160,7 @@ async def ingest_documents(
 
 
 @router.get("/documents", response_model=CollectionInfoResponse)
-async def list_documents(collection_name: Optional[str] = settings.collection_name):
+async def list_documents(collection_name: str = settings.collection_name):
     """List all documents in the vectorstore."""
 
     vectorstore = VectorStore(

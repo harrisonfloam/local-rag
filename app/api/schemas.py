@@ -21,7 +21,6 @@ class ChatRequest(BaseModel):
     system_prompt: str = RAG_SYSTEM_PROMPT
     model: str
     temperature: float = Field(default=settings.temperature, ge=0.0, le=2.0)
-    embedding_model: str = settings.embedding_model_name
     top_k: int = Field(default=settings.top_k, ge=1)
     dev: DevSettings = Field(default_factory=DevSettings)
 

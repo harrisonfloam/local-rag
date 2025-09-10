@@ -32,8 +32,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             duration = time.time() - start_time
 
-            # Handle streaming responses differently
-            if response.__class__.__name__ == "StreamingResponse":
+            # Detect streaming responses via custom header
+            if response.headers.get("X-Stream-Response") == "true":
                 logger.info(
                     f"{request.method} {endpoint} {response.status_code} stream started in {duration:.4f}s"
                 )
