@@ -7,6 +7,7 @@ import streamlit as st
 from app.api.schemas import ChatRequest
 from app.settings import settings
 from ui.models import ChatMessageWithMetadata
+from ui.utils.exceptions import StreamlitErrorMessage
 from ui.utils.session_state import get_chat_request_params
 
 
@@ -51,7 +52,7 @@ def handle_chat_input(chat_container):
                             llm_message = "".join(llm_message)
 
                         # Use final response if available, otherwise create from stream
-                        final_response = final_response_ref["data"]
+                        final_response = final_response_ref.get("data")
                         if final_response:
                             assistant_message = (
                                 ChatMessageWithMetadata.from_assistant_response(
@@ -87,7 +88,7 @@ def handle_chat_input(chat_container):
                     st.session_state.messages.append(assistant_message.model_dump())
 
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    raise StreamlitErrorMessage("Error", details=str(e), style="error")
 
 
 def get_chat_stream(request: ChatRequest):
@@ -116,7 +117,7 @@ def get_chat_stream(request: ChatRequest):
                                 pass
                             expecting_final_data = False
                         else:
-                            # Yield content immediately for real-time streaming
+                            # Yield content
                             content = line[6:]  # Remove "data: " prefix
                             yield content
                     elif line == "event: final":
