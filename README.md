@@ -21,6 +21,10 @@ The only hard requirements for normal execution is [Docker Desktop](https://docs
 
 After installing ollama, pull an embedding model and an llm. We recommend [nomic-embed-text](https://ollama.com/library/nomic-embed-text) for an embedding model.
 
+```bash
+ollama pull gpt-oss:latest
+```
+
 ### Run with Make
 
 Start the application, build the Docker image, and run tests quickly using commands from the [Makefile](Makefile). Run the following from the project root to start the application:
