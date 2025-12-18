@@ -1,10 +1,11 @@
-FROM python:3.12-bookworm
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm
 
 WORKDIR /local-rag
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . .
+
+# ENV UV_COMPILE_BYTECODE=1
+RUN uv sync
+ENV PATH="/local-rag/.venv/bin:$PATH"
 
 CMD ["python", "-m", "app.api.main"]

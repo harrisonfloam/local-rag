@@ -16,7 +16,8 @@ help:
 
 # Start application with only app logs visible
 up:
-	docker compose up --attach app
+	docker compose up ollama chromadb -d
+	docker compose up app
 
 # Stop all services
 down:
