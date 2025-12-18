@@ -13,6 +13,7 @@ requests
 semantic-text-splitter
 openai
 instructor
+markitdown[pdf,docx]
 chromadb
 
 pydantic

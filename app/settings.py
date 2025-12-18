@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     ollama_port: int = 11434
     model_name: str = "llama3.2:1b"
     temperature: float = 0.7
-    stream: bool = False  # Stream chat responses
+    stream: bool = True  # Stream chat responses
     mock_llm: bool = False  # DEV: Use a mock LLM for testing purposes
     # TODO: conversation memory settings
 
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     top_k: int = 5
     chunk_size: int = 1024
     chunk_overlap: int = 200
-    documents_path: str = "./data/documents"
+    documents_path: str = "./data"
     mock_rag_response: bool = False  # DEV: Use a mock RAG response for testing
     mock_documents: bool = False  # DEV: Use mock documents for testing
 

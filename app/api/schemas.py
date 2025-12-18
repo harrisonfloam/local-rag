@@ -21,6 +21,8 @@ class ChatRequest(BaseModel):
     messages: List[Dict[str, str]]
     system_prompt: str = RAG_SYSTEM_PROMPT
     model: str
+    collection_name: str = settings.collection_name
+    embedding_model: Optional[str] = None
     temperature: float = Field(default=settings.temperature, ge=0.0, le=2.0)
     top_k: int = Field(default=settings.top_k, ge=1)
     dev: DevSettings = Field(default_factory=DevSettings)
@@ -35,6 +37,8 @@ class ChatCompletionWithSources(ChatCompletion):
 # Retrieve endpoint
 class RetrieveRequest(BaseModel):
     query: str
+    collection_name: str = settings.collection_name
+    embedding_model: Optional[str] = None
     top_k: int = Field(default=settings.top_k, ge=1, le=50)
     dev: DevSettings = Field(default_factory=DevSettings)
 
@@ -103,3 +107,23 @@ class CollectionInfoResponse(BaseModel):
     total_documents: int
     embedding_model: str
     documents: List[Document]
+
+
+# Local directory sync endpoint
+class SyncDirectoriesRequest(BaseModel):
+    """Sync one or more local directories into a collection.
+
+    Paths are resolved relative to settings.documents_path.
+    """
+
+    collection_name: str = settings.collection_name
+    embedding_model: str = settings.embedding_model_name
+    paths: List[str] = Field(default_factory=list)
+    chunk_size: int = Field(default=settings.chunk_size, ge=100, le=8000)
+    chunk_overlap: int = Field(default=settings.chunk_overlap, ge=0, le=1000)
+
+
+class SyncDirectoriesResponse(BaseModel):
+    total_files: int
+    chunk_ids: Dict[str, List[str]] = Field(default_factory=dict)
+    errors: Dict[str, str] = Field(default_factory=dict)

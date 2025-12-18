@@ -1,7 +1,9 @@
 import uuid
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
+from markitdown import MarkItDown
 from pydantic import BaseModel, Field
 from semantic_text_splitter import TextSplitter
 from starlette.datastructures import UploadFile
@@ -32,9 +34,14 @@ class Document(BaseModel):
         """Create document from file path."""
         path = Path(file)
 
-        # TODO: extend for more file types - pdf, docx, etc
-        if path.suffix.lower() in [".txt", ".md"]:
+        suffix = path.suffix.lower()
+
+        if suffix in [".txt", ".md"]:
             content = path.read_text(encoding="utf-8")
+        elif suffix in [".pdf", ".docx"]:
+            md = MarkItDown()
+            result = md.convert(str(path))
+            content = result.text_content
         else:
             raise ValueError(f"Unsupported file type: {path.suffix}")
 
@@ -81,11 +88,16 @@ class Document(BaseModel):
         """Create document from FastAPI UploadFile"""
         content_bytes = await file.read()
 
+        filename = file.filename or ""
+        suffix = Path(filename).suffix.lower() if filename else ""
+
         # Handle different file types based on filename or content type
-        if file.content_type == "text/plain" or (
-            file.filename and file.filename.endswith((".txt", ".md"))
-        ):
+        if file.content_type == "text/plain" or suffix in {".txt", ".md"}:
             content = content_bytes.decode("utf-8")
+        elif suffix in {".pdf", ".docx"}:
+            md = MarkItDown()
+            result = md.convert_stream(BytesIO(content_bytes), file_extension=suffix)
+            content = result.text_content
         else:
             raise ValueError(f"Unsupported file type: {file.content_type or 'unknown'}")
 

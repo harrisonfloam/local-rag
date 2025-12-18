@@ -107,10 +107,19 @@ class VectorStore(metaclass=CallbackMeta):
         # TODO: error handling?
         # TODO: need to self check if docs are duplicated
         self.collection_name = collection_name
-        self.collection = self.client.get_or_create_collection(
-            name=self.collection_name,
-            embedding_function=self.embedding_function,  # type: ignore
-        )
+        try:
+            self.collection = self.client.get_or_create_collection(
+                name=self.collection_name,
+                embedding_function=self.embedding_function,  # type: ignore
+                configuration={"hnsw": {"space": "cosine"}},
+            )
+        except TypeError:
+            # Older Chroma versions use metadata for HNSW config
+            self.collection = self.client.get_or_create_collection(
+                name=self.collection_name,
+                embedding_function=self.embedding_function,  # type: ignore
+                metadata={"hnsw:space": "cosine"},
+            )
 
     @with_callbacks
     def add_document(
@@ -194,6 +203,54 @@ class VectorStore(metaclass=CallbackMeta):
             chunk_ids=chunk_ids,
             errors=errors,
         )
+
+    def _delete_chunks_by_source(self, source: str) -> int:
+        # TODO: this currently scans the whole collection (collection.get without a where filter).
+        # It's fine for small local collections, but will get slow as collections grow.
+        results = self.collection.get(include=["metadatas"])
+        metadatas = results.get("metadatas", []) or []
+        ids = results.get("ids", []) or []
+
+        chunk_ids_to_delete = [
+            chunk_id
+            for chunk_id, meta in zip(ids, metadatas)
+            if meta and meta.get("source") == source
+        ]
+
+        if chunk_ids_to_delete:
+            self.collection.delete(ids=chunk_ids_to_delete)
+
+        return len(chunk_ids_to_delete)
+
+    async def upsert_files(
+        self,
+        files: Sequence[Union[str, Path, UploadFile]],
+        chunk_size: int = settings.chunk_size,
+        chunk_overlap: int = settings.chunk_overlap,
+    ) -> AddFilesResult:
+        """Upsert files by deleting any existing chunks for the same source first."""
+        chunk_ids = {}
+        errors = {}
+
+        for file in files:
+            if isinstance(file, UploadFile):
+                filename = file.filename or "unknown"
+                source = f"upload/{filename}"
+            else:
+                path = Path(file)
+                filename = str(path)
+                source = str(path)
+
+            try:
+                self._delete_chunks_by_source(source)
+                ids = await self.add_file(
+                    file, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                )
+                chunk_ids[filename] = ids
+            except Exception as e:
+                errors[filename] = str(e)
+
+        return AddFilesResult(chunk_ids=chunk_ids, errors=errors)
 
     @with_callbacks
     def search(self, query: str, k: int = 5) -> List[RetrievedDocumentChunk]:

@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from typing import List, Optional
 
 import httpx
@@ -15,8 +16,15 @@ from app.api.schemas import (
     IngestResponse,
     RetrieveRequest,
     RetrieveResponse,
+    SyncDirectoriesRequest,
+    SyncDirectoriesResponse,
 )
-from app.core.llm_client import AsyncOllamaLLMClient, MockAsyncLLMClient
+from app.core.llm_helpers import (
+    async_stream_completion,
+    create_async_ollama_client,
+    mock_chat_completion,
+    mock_stream_chat_with_final,
+)
 from app.core.prompts import RAG_USER_PROMPT
 from app.core.vectorstore import VectorStore
 from app.settings import settings
@@ -34,12 +42,6 @@ async def health_check():
 @router.post("/chat")
 async def chat(request: ChatRequest):
     """Chat with the RAG system."""
-    # Initialize LLM client once
-    if request.dev.mock_llm:
-        llm = MockAsyncLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
-    else:
-        llm = AsyncOllamaLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
-
     retrieve_response = None
     if request.dev.use_rag:
         query = request.messages[-1]["content"]
@@ -47,7 +49,11 @@ async def chat(request: ChatRequest):
         # a new system prompt that takes the summarized conversation history
         # and rephrases the RAG query to be better
         retrieve_request = RetrieveRequest(
-            query=query, top_k=request.top_k, dev=request.dev
+            query=query,
+            collection_name=request.collection_name,
+            embedding_model=request.embedding_model,
+            top_k=request.top_k,
+            dev=request.dev,
         )
         retrieve_response = await retrieve(retrieve_request)
         retrieved_docs = "\n\n".join([str(doc) for doc in retrieve_response.results])
@@ -70,17 +76,26 @@ async def chat(request: ChatRequest):
 
     if request.dev.stream:
         return StreamingResponse(
-            chat_stream_generator(llm, messages, request, retrieve_response),
+            chat_stream_generator(messages, request, retrieve_response),
             media_type="text/plain",
             headers={"X-Stream-Response": "true"},
         )
 
     # Regular response
-    response = await llm.chat(
-        messages=messages,
-        model=request.model,
-        temperature=request.temperature,
-    )
+    if request.dev.mock_llm:
+        response = await mock_chat_completion(
+            messages=messages,
+            model=request.model,
+            temperature=request.temperature,
+        )
+    else:
+        client = create_async_ollama_client(base_url=settings.ollama_base_url)
+        response = await client.chat.completions.create(
+            messages=messages,  # type: ignore[arg-type]
+            model=request.model,
+            temperature=request.temperature,
+            stream=False,
+        )
 
     return ChatCompletionWithSources(
         sources=retrieve_response.results if retrieve_response else [],
@@ -88,15 +103,32 @@ async def chat(request: ChatRequest):
     )
 
 
-async def chat_stream_generator(llm, messages, request, retrieve_response):
+async def chat_stream_generator(messages, request, retrieve_response):
     """Generate streaming chat responses with SSE-style format."""
     final_response = None
 
-    async for chunk in llm.stream(
-        messages=messages,
-        model=request.model,
-        temperature=request.temperature,
-    ):
+    def _sse_data(payload: str) -> str:
+        # SSE requires each line of a multi-line data payload to be prefixed with `data:`.
+        # Otherwise newline characters inside payload will be mis-parsed by clients.
+        normalized = payload.replace("\r\n", "\n").replace("\r", "\n")
+        return f"data: {normalized.replace('\n', '\ndata: ')}\n\n"
+
+    if request.dev.mock_llm:
+        stream_iter = mock_stream_chat_with_final(
+            messages=messages,
+            model=request.model,
+            temperature=request.temperature,
+        )
+    else:
+        client = create_async_ollama_client(base_url=settings.ollama_base_url)
+        stream_iter = async_stream_completion(
+            client,
+            messages=messages,
+            model=request.model,
+            temperature=request.temperature,
+        )
+
+    async for chunk in stream_iter:
         # Final response object
         if isinstance(chunk, dict):
             final_response = chunk
@@ -107,7 +139,7 @@ async def chat_stream_generator(llm, messages, request, retrieve_response):
                 ]
         else:
             # Stream content with SSE-style format
-            yield f"data: {chunk}\n\n"
+            yield _sse_data(chunk)
     # TODO: log the response
     if final_response:
         yield f"event: final\ndata: {json.dumps(final_response)}\n\n"
@@ -125,8 +157,8 @@ async def retrieve(request: RetrieveRequest):
         return response
     else:
         vectorstore = VectorStore(
-            collection_name=settings.collection_name,
-            embedding_model=settings.embedding_model_name,  # TODO: this should use the embedding model that the collection uses...
+            collection_name=request.collection_name,
+            embedding_model=request.embedding_model or settings.embedding_model_name,
         )
         results = vectorstore.search(query=request.query, k=request.top_k)
         response = RetrieveResponse(query=request.query, results=results)
@@ -164,13 +196,90 @@ async def ingest_documents(
     return response
 
 
+@router.post("/documents/sync", response_model=SyncDirectoriesResponse)
+async def sync_directories(request: SyncDirectoriesRequest) -> SyncDirectoriesResponse:
+    """Sync one or more local directories into a collection.
+
+    For safety, only directories under settings.documents_path are allowed.
+    """
+
+    base_dir = Path(settings.documents_path).resolve()
+
+    if not request.paths:
+        raise HTTPException(status_code=400, detail="paths is required")
+
+    directories: list[Path] = []
+    for raw_path in request.paths:
+        raw_path = (raw_path or "").strip()
+        if not raw_path:
+            continue
+        candidate = Path(raw_path)
+        target = (
+            candidate.resolve()
+            if candidate.is_absolute()
+            else (base_dir / candidate).resolve()
+        )
+
+        if not target.exists() or not target.is_dir():
+            raise HTTPException(
+                status_code=400, detail=f"Directory not found: {raw_path}"
+            )
+
+        try:
+            if not target.is_relative_to(base_dir):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Directory must be under {str(base_dir)}: {raw_path}",
+                )
+        except AttributeError:
+            # Python < 3.9 fallback (shouldn't be hit in this repo)
+            if base_dir not in target.parents and target != base_dir:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Directory must be under {str(base_dir)}: {raw_path}",
+                )
+
+        directories.append(target)
+
+    allowed_exts = {".txt", ".md", ".pdf", ".docx"}
+    files: list[Path] = []
+    for directory in directories:
+        for p in directory.rglob("*"):
+            if p.is_file() and p.suffix.lower() in allowed_exts:
+                files.append(p)
+
+    if not files:
+        return SyncDirectoriesResponse(total_files=0, chunk_ids={}, errors={})
+
+    vectorstore = VectorStore(
+        log_level="INFO" if not settings.debug else "DEBUG",
+        collection_name=request.collection_name,
+        embedding_model=request.embedding_model,
+    )
+
+    results = await vectorstore.upsert_files(
+        files=files,
+        chunk_size=request.chunk_size,
+        chunk_overlap=request.chunk_overlap,
+    )
+
+    return SyncDirectoriesResponse(
+        total_files=len(files),
+        chunk_ids=results.chunk_ids,
+        errors=results.errors,
+    )
+
+
 @router.get("/documents", response_model=CollectionInfoResponse)
-async def list_documents(collection_name: str = settings.collection_name):
+async def list_documents(
+    collection_name: str = settings.collection_name,
+    embedding_model: Optional[str] = None,
+):
     """List all documents in the vectorstore."""
 
     vectorstore = VectorStore(
         collection_name=collection_name,
-        embedding_model=settings.embedding_model_name,
+        embedding_model=embedding_model or settings.embedding_model_name,
     )
 
     collection_info = vectorstore.get_collection_info()
@@ -214,8 +323,8 @@ async def delete_documents(request: DeleteRequest):
 @router.get("/models")
 async def list_models():
     """List available models."""
-    llm = AsyncOllamaLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
-    models = await llm.client.models.list()
+    client = create_async_ollama_client(base_url=settings.ollama_base_url)
+    models = await client.models.list()
     model_names = [model.id for model in models.data]
     models_info = []
 
