@@ -107,6 +107,9 @@ class Document(BaseModel):
         overlap: int = settings.chunk_overlap,
     ) -> List["DocumentChunk"]:
         """Convert document to chunks using semantic-text-splitter."""
+        # Record the actual chunking params used in the document metadata
+        self.metadata["chunk_size"] = chunk_size
+        self.metadata["chunk_overlap"] = overlap
 
         splitter = TextSplitter.from_tiktoken_model(
             "gpt-3.5-turbo", capacity=chunk_size, overlap=overlap
