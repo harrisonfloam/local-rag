@@ -40,14 +40,15 @@ async def chat(request: ChatRequest):
     else:
         llm = AsyncOllamaLLMClient(log_level="INFO" if not settings.debug else "DEBUG")
 
-    # Retrieve context
     retrieve_response = None
     if request.dev.use_rag:
         query = request.messages[-1]["content"]
         # TODO: add summary of conversation history to query? core request? param to toggle this?
         # a new system prompt that takes the summarized conversation history
         # and rephrases the RAG query to be better
-        retrieve_request = RetrieveRequest(query=query, top_k=request.top_k)
+        retrieve_request = RetrieveRequest(
+            query=query, top_k=request.top_k, dev=request.dev
+        )
         retrieve_response = await retrieve(retrieve_request)
         retrieved_docs = "\n\n".join([str(doc) for doc in retrieve_response.results])
 
@@ -115,20 +116,24 @@ async def chat_stream_generator(llm, messages, request, retrieve_response):
 @router.post("/retrieve")
 async def retrieve(request: RetrieveRequest):
     """Retrieve relevant documents based on a query."""
-    vectorstore = VectorStore(
-        collection_name=settings.collection_name,
-        embedding_model=settings.embedding_model_name,  # TODO: this should use the embedding model that the collection uses...
-    )
-
-    results = vectorstore.search(query=request.query, k=request.top_k)
-
-    response = RetrieveResponse(query=request.query, results=results)
-
-    logger.debug(
-        f"Retrieve response for '{request.query}': {len(results)} results, top score: {results[0].score if results else 'N/A'}"
-    )
-
-    return response
+    if request.dev.mock_rag_response:
+        results = VectorStore.mock_retrieve(request.query, request.top_k)
+        response = RetrieveResponse(query=request.query, results=results)
+        logger.debug(
+            f"Mock retrieve response for '{request.query}': {len(results)} results."
+        )
+        return response
+    else:
+        vectorstore = VectorStore(
+            collection_name=settings.collection_name,
+            embedding_model=settings.embedding_model_name,  # TODO: this should use the embedding model that the collection uses...
+        )
+        results = vectorstore.search(query=request.query, k=request.top_k)
+        response = RetrieveResponse(query=request.query, results=results)
+        logger.debug(
+            f"Retrieve response for '{request.query}': {len(results)} results, top score: {results[0].score if results else 'N/A'}"
+        )
+        return response
 
 
 @router.post("/documents/ingest")
@@ -243,7 +248,9 @@ async def list_models():
     available_models = {
         "models": {model["name"]: model for model in models_info},
         "completion_models": [
-            m["name"] for m in models_info if "completion" in m["capabilities"]
+            m["name"]
+            for m in models_info
+            if "completion" in m["capabilities"] or "unknown" in m["capabilities"]
         ],
         "embedding_models": [
             m["name"] for m in models_info if "embedding" in m["capabilities"]

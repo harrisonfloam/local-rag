@@ -14,6 +14,7 @@ class DevSettings(BaseModel):
     use_rag: bool = True
     mock_llm: bool = settings.mock_llm
     stream: bool = settings.stream
+    mock_rag_response: bool = settings.mock_rag_response
 
 
 class ChatRequest(BaseModel):
@@ -35,6 +36,7 @@ class ChatCompletionWithSources(ChatCompletion):
 class RetrieveRequest(BaseModel):
     query: str
     top_k: int = Field(default=settings.top_k, ge=1, le=50)
+    dev: DevSettings = Field(default_factory=DevSettings)
 
 
 class RetrieveResponse(BaseModel):

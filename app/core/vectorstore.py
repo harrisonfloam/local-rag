@@ -296,6 +296,23 @@ class VectorStore(metaclass=CallbackMeta):
 
         return len(chunk_ids_to_delete)
 
+    @staticmethod
+    def mock_retrieve(query: str, top_k: int = 1):
+        """Return a mock retrieve result for testing."""
+        top_k = max(1, int(top_k))
+        return [
+            RetrievedDocumentChunk(
+                id=f"mock-chunk-{i + 1}",
+                content=f"This is a mock retrieved chunk for: {query}",
+                document_id="mock-doc-1",
+                document_title="mock.txt",
+                chunk_index=i,
+                metadata={"file_size": 123, "file_extension": ".txt"},
+                score=0.99,
+            )
+            for i in range(top_k)
+        ]
+
     @with_callbacks
     def delete_collection(self, collection_name: Optional[str] = None) -> bool:
         """Delete the collection."""
