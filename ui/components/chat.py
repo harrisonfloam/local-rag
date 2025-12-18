@@ -105,23 +105,62 @@ def get_chat_stream(request: ChatRequest):
             ) as response:
                 response.raise_for_status()
 
-                expecting_final_data = False
+                # IMPORTANT: don't use iter_lines() here.
+                # The server streams SSE "data: <chunk>\n\n" and <chunk> itself can
+                # contain newlines. iter_lines() splits those newlines and we lose
+                # formatting. Instead parse by SSE event blocks (blank-line delimited).
+                buffer = ""
+                for text in response.iter_text():
+                    if not text:
+                        continue
+                    buffer += text.replace("\r\n", "\n").replace("\r", "\n")
 
-                for line in response.iter_lines():
-                    if line.startswith("data: "):
-                        if expecting_final_data:
-                            # Parse final response and store in shared state
+                    while "\n\n" in buffer:
+                        block, buffer = buffer.split("\n\n", 1)
+                        if not block:
+                            continue
+
+                        lines = block.splitlines()
+
+                        event_name: str | None = None
+                        data_lines: list[str] = []
+                        saw_data = False
+
+                        for line in lines:
+                            if line.startswith("event:"):
+                                event_name = line[len("event:") :].strip()
+                                continue
+
+                            if line.startswith("data:"):
+                                payload = line[len("data:") :]
+                                if payload.startswith(" "):
+                                    payload = payload[1:]
+                                data_lines.append(payload)
+                                saw_data = True
+                                continue
+
+                            # Non-compliant continuation lines: treat as data continuation
+                            if saw_data:
+                                data_lines.append(line)
+
+                        if not saw_data:
+                            continue
+
+                        payload = "\n".join(data_lines)
+
+                        if event_name == "final":
                             try:
-                                final_response_ref["data"] = json.loads(line[6:])
+                                final_response_ref["data"] = json.loads(payload)
                             except Exception:
                                 pass
-                            expecting_final_data = False
+                            continue
+
+                        # Preserve chunks that are a lone newline: server may send that as
+                        # a single empty data line.
+                        if payload == "":
+                            yield "\n"
                         else:
-                            # Yield content
-                            content = line[6:]  # Remove "data: " prefix
-                            yield content
-                    elif line == "event: final":
-                        expecting_final_data = True
+                            yield payload
 
     response_time = time.time() - start_time
     return streaming_generator(), response_time, final_response_ref
@@ -222,4 +261,18 @@ def render_chat_history():
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+                if message["role"] == "assistant":
+                    try:
+                        msg = ChatMessageWithMetadata(**message)
+                        sources = msg.metadata.sources or []
+                        if sources:
+                            with st.expander(f"sources ({len(sources)})"):
+                                for i, src in enumerate(sources, start=1):
+                                    st.caption(
+                                        f"{i}. {src.document_title} · chunk {src.chunk_index} · score {src.score:.3f}"
+                                    )
+                                    st.code(src.content.strip()[:2000])
+                    except Exception:
+                        # Don't let rendering issues break the chat UI
+                        pass
     return chat_container

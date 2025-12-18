@@ -64,7 +64,8 @@ def render_checkboxes():
     else:
         st.session_state.mock_llm = settings.mock_llm
         st.session_state.mock_rag_response = settings.mock_rag_response
-        st.session_state.stream = settings.stream
+        # In non-dev mode we keep things simple: always stream by default.
+        st.session_state.stream = True
 
 
 def render_model_selection():

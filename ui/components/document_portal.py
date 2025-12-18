@@ -63,6 +63,55 @@ def render_document_portal():
             step=10,
         )
 
+    st.markdown("---")
+    st.subheader("sync directories")
+    st.caption("Sync files from local folders mounted under ./data (pdf/docx/txt/md).")
+
+    default_sync = "documents"
+    sync_dirs_text = st.text_area(
+        "Directories (one per line, relative to ./data)",
+        key="sync_directories",
+        value=st.session_state.get("sync_directories", default_sync),
+        height=70,
+    )
+
+    if st.button("Sync Directories", key="sync_directories_button"):
+        sync_paths = [
+            line.strip() for line in sync_dirs_text.splitlines() if line.strip()
+        ]
+        if not sync_paths:
+            raise StreamlitToastMessage("No directories provided", icon="⚠️")
+
+        with st.spinner("Syncing directories..."):
+            try:
+                payload = {
+                    "collection_name": collection_name,
+                    "embedding_model": embedding_model,
+                    "paths": sync_paths,
+                    "chunk_size": chunk_size,
+                    "chunk_overlap": chunk_overlap,
+                }
+                with httpx.Client(timeout=settings.httpx_timeout) as client:
+                    response = client.post(
+                        f"{settings.api_url}/documents/sync",
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+
+                errors = data.get("errors", {})
+                if errors:
+                    raise StreamlitToastMessage(
+                        f"Synced with {len(errors)} errors",
+                        icon="⚠️",
+                    )
+
+                refresh_collection_info(collection_name)
+            except (StreamlitRerunNeeded, StreamlitErrorMessage, StreamlitToastMessage):
+                raise
+            except Exception as e:
+                raise StreamlitErrorMessage("Error syncing directories", details=str(e))
+
     button_col1, button_col2 = st.columns(2)
     with button_col1:
         if st.button(
@@ -163,7 +212,10 @@ def refresh_collection_info(collection_name: Optional[str] = None) -> bool:
     try:
         with httpx.Client(timeout=settings.httpx_timeout) as client:
             params = {
-                "collection_name": collection_name or st.session_state.collection_name
+                "collection_name": collection_name or st.session_state.collection_name,
+                "embedding_model": st.session_state.get(
+                    "embedding_model", settings.embedding_model_name
+                ),
             }
             response = client.get(f"{settings.api_url}/documents", params=params)
             response.raise_for_status()
@@ -203,7 +255,7 @@ def handle_document_upload(
                 response = client.post(
                     f"{settings.api_url}/documents/ingest",
                     files=files_data,
-                    data=ingest_request.model_dump(),
+                    params=ingest_request.model_dump(),
                 )
                 response.raise_for_status()
                 response_data = response.json()
