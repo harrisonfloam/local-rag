@@ -48,6 +48,8 @@ docker compose up
 - [ ] Improve document sync UX
 - [ ] Improve document portal UI
 - [ ] Add simple conversation memory
+- [ ] Add agentic tool calling and reasoning
+- [ ] Add reusable prompts
 - [ ] Expose more configurable parameters
 - [ ] Improve configuration panel UI
 - [ ] Add summarization functionality

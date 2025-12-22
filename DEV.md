@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 ### Running the app
 
-To attach your terminal just the app container, not the ollama and chromadb containers:
+To attach your terminal to just the app container, not the ollama and chromadb containers:
 
 ```bash
 docker compose up --attach app
