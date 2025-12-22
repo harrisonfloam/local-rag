@@ -6,6 +6,7 @@ from typing import List, Optional
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from openai.types.chat import ChatCompletion
 
 from app.api.schemas import (
     ChatCompletionWithSources,
@@ -21,9 +22,9 @@ from app.api.schemas import (
 )
 from app.core.llm_helpers import (
     async_stream_completion,
-    create_async_ollama_client,
+    create_ollama_client,
     mock_chat_completion,
-    mock_stream_chat_with_final,
+    mock_stream_completion,
 )
 from app.core.prompts import RAG_USER_PROMPT
 from app.core.vectorstore import VectorStore
@@ -89,7 +90,9 @@ async def chat(request: ChatRequest):
             temperature=request.temperature,
         )
     else:
-        client = create_async_ollama_client(base_url=settings.ollama_base_url)
+        client = create_ollama_client(
+            base_url=settings.ollama_base_url, async_client=True
+        )
         response = await client.chat.completions.create(
             messages=messages,  # type: ignore[arg-type]
             model=request.model,
@@ -114,28 +117,30 @@ async def chat_stream_generator(messages, request, retrieve_response):
         return f"data: {normalized.replace('\n', '\ndata: ')}\n\n"
 
     if request.dev.mock_llm:
-        stream_iter = mock_stream_chat_with_final(
+        stream_iter = mock_stream_completion(
             messages=messages,
             model=request.model,
             temperature=request.temperature,
         )
     else:
-        client = create_async_ollama_client(base_url=settings.ollama_base_url)
+        client = create_ollama_client(
+            base_url=settings.ollama_base_url, async_client=True
+        )
         stream_iter = async_stream_completion(
             client,
-            messages=messages,
-            model=request.model,
+            request.model,
+            messages,
             temperature=request.temperature,
         )
 
     async for chunk in stream_iter:
         # Final response object
-        if isinstance(chunk, dict):
-            final_response = chunk
+        if isinstance(chunk, ChatCompletion):
+            final_response = chunk.model_dump()
             # Add sources
             if retrieve_response:
                 final_response["sources"] = [
-                    chunk.model_dump() for chunk in retrieve_response.results
+                    doc.model_dump() for doc in retrieve_response.results
                 ]
         else:
             # Stream content with SSE-style format
@@ -323,7 +328,7 @@ async def delete_documents(request: DeleteRequest):
 @router.get("/models")
 async def list_models():
     """List available models."""
-    client = create_async_ollama_client(base_url=settings.ollama_base_url)
+    client = create_ollama_client(base_url=settings.ollama_base_url, async_client=True)
     models = await client.models.list()
     model_names = [model.id for model in models.data]
     models_info = []
