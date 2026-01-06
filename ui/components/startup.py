@@ -28,20 +28,35 @@ def fetch_models():
                 model_info = response.json()
         except Exception as e:
             # Set fallback info first, then raise exception
-            model_info = {
-                "models": [settings.model_name, settings.embedding_model_name],
-                "completion_models": [settings.model_name],
-                "embedding_models": [settings.embedding_model_name],
-            }
+            model_info = [
+                {
+                    "name": settings.model_name,
+                    "capabilities": ["completion", "unknown"],
+                },
+                {
+                    "name": settings.embedding_model_name,
+                    "capabilities": ["embedding", "unknown"],
+                },
+            ]
             st.session_state.model_info = model_info
-            st.session_state.completion_models = model_info.get("completion_models", [])
-            st.session_state.embedding_models = model_info.get("embedding_models", [])
+            st.session_state.completion_models = [settings.model_name]
+            st.session_state.embedding_models = [settings.embedding_model_name]
             raise StreamlitErrorMessage(
                 "Error fetching models", details=str(e), icon="⚠️", style="toast"
             )
-        st.session_state.model_info = model_info
-        st.session_state.completion_models = model_info.get("completion_models", [])
-        st.session_state.embedding_models = model_info.get("embedding_models", [])
+
+        models_info = model_info
+        st.session_state.model_info = models_info
+
+        st.session_state.completion_models = [
+            m["name"]
+            for m in models_info
+            if "completion" in m.get("capabilities", [])
+            or "unknown" in m.get("capabilities", [])
+        ]
+        st.session_state.embedding_models = [
+            m["name"] for m in models_info if "embedding" in m.get("capabilities", [])
+        ]
 
 
 def fetch_default_collection_info():

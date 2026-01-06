@@ -26,6 +26,9 @@ from app.core.llm_helpers import (
     mock_chat_completion,
     mock_stream_completion,
 )
+from app.core.llm_helpers import (
+    list_models as llm_list_models,
+)
 from app.core.prompts import RAG_USER_PROMPT
 from app.core.vectorstore import VectorStore
 from app.settings import settings
@@ -84,7 +87,7 @@ async def chat(request: ChatRequest):
 
     # Regular response
     if request.dev.mock_llm:
-        response = await mock_chat_completion(
+        response = mock_chat_completion(
             messages=messages,
             model=request.model,
             temperature=request.temperature,
@@ -329,48 +332,8 @@ async def delete_documents(request: DeleteRequest):
 async def list_models():
     """List available models."""
     client = create_ollama_client(base_url=settings.ollama_base_url, async_client=True)
-    models = await client.models.list()
-    model_names = [model.id for model in models.data]
-    models_info = []
-
-    # Check model capabilities
-    async with httpx.AsyncClient(timeout=settings.httpx_timeout) as client:
-        for model_name in model_names:
-            try:
-                response = await client.post(
-                    f"{settings.ollama_base_url}/api/show", json={"name": model_name}
-                )
-                response.raise_for_status()
-                model_info = response.json()
-                # Extract model info
-                capabilities = model_info.get("capabilities", [])
-                models_info.append(
-                    {
-                        "name": model_name,
-                        "capabilities": capabilities,
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to get details for model {model_name}: {e}")
-                models_info.append(
-                    {
-                        "name": model_name,
-                        "capabilities": ["unknown"],
-                    }
-                )
-
-    available_models = {
-        "models": {model["name"]: model for model in models_info},
-        "completion_models": [
-            m["name"]
-            for m in models_info
-            if "completion" in m["capabilities"] or "unknown" in m["capabilities"]
-        ],
-        "embedding_models": [
-            m["name"] for m in models_info if "embedding" in m["capabilities"]
-        ],
-        "total": len(models_info),
-    }
-    logger.debug(f"Completion models: {available_models['completion_models']}")
-    logger.debug(f"Embedding models: {available_models['embedding_models']}")
-    return available_models
+    return await llm_list_models(
+        client,
+        base_url=settings.ollama_base_url,
+        include_capabilities=True,
+    )

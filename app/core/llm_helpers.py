@@ -14,6 +14,10 @@ Streaming Functions:
     stream_completion(): Streams text chunks, yields final ChatCompletion
     async_stream_completion(): Async version of stream_completion()
 
+Model Listing:
+    list_models(): List available models
+    async_list_models(): Async version of list_models()
+
 Mock Functions:
     mock_chat_completion(): Mock chat response for testing
     mock_stream_completion(): Mock streaming response for testing
@@ -24,7 +28,16 @@ import os
 import random
 import time
 from datetime import datetime
-from typing import Any, AsyncIterator, Iterator, Optional, TypeVar, cast, overload
+from typing import (
+    Any,
+    AsyncIterator,
+    Iterator,
+    Literal,
+    Optional,
+    TypeVar,
+    cast,
+    overload,
+)
 
 from openai import AsyncOpenAI, OpenAI
 from openai.types.chat import (
@@ -33,36 +46,47 @@ from openai.types.chat import (
     ChatCompletionMessageParam,
 )
 from openai.types.chat.chat_completion import Choice
+from openai.types.completion_usage import CompletionUsage
 from openai.types.shared_params.response_format_json_schema import (
     JSONSchema,
     ResponseFormatJSONSchema,
 )
 from pydantic import BaseModel
-from typing_extensions import Literal
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+FinishReason = Literal[
+    "stop",
+    "length",
+    "tool_calls",
+    "content_filter",
+    "function_call",
+]
+
 
 @overload
 def create_ollama_client(
     base_url: str = "http://localhost:11434",
+    *,
     async_client: Literal[False] = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> OpenAI: ...
 
 
 @overload
 def create_ollama_client(
     base_url: str = "http://localhost:11434",
-    async_client: Literal[True] = ...,
-    **kwargs,
+    *,
+    async_client: Literal[True],
+    **kwargs: Any,
 ) -> AsyncOpenAI: ...
 
 
 def create_ollama_client(
     base_url: str = "http://localhost:11434",
+    *,
     async_client: bool = False,
     **kwargs,
 ) -> OpenAI | AsyncOpenAI:
@@ -83,25 +107,31 @@ def create_ollama_client(
     normalized_url = f"{base_url.rstrip('/')}/v1"
 
     if async_client:
-        return AsyncOpenAI(
+        # Tag provider as 'ollama'
+        ollama_client = AsyncOpenAI(
             api_key="ollama",
             base_url=normalized_url,
             **kwargs,
         )
+        setattr(ollama_client, "_llm_provider", "ollama")
+        return ollama_client
     else:
-        return OpenAI(
+        ollama_client = OpenAI(
             api_key="ollama",
             base_url=normalized_url,
             **kwargs,
         )
+        setattr(ollama_client, "_llm_provider", "ollama")
+        return ollama_client
 
 
 @overload
 def create_mistral_client(
     api_key: Optional[str] = None,
     server_url: str = "https://api.mistral.ai",
+    *,
     async_client: Literal[False] = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> OpenAI: ...
 
 
@@ -109,16 +139,18 @@ def create_mistral_client(
 def create_mistral_client(
     api_key: Optional[str] = None,
     server_url: str = "https://api.mistral.ai",
-    async_client: Literal[True] = ...,
-    **kwargs,
+    *,
+    async_client: Literal[True],
+    **kwargs: Any,
 ) -> AsyncOpenAI: ...
 
 
 def create_mistral_client(
     api_key: Optional[str] = None,
     server_url: str = "https://api.mistral.ai",
+    *,
     async_client: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> OpenAI | AsyncOpenAI:
     """Creates an OpenAI-compatible client for MistralAI.
 
@@ -135,7 +167,7 @@ def create_mistral_client(
         >>> client = create_mistral_client(api_key="your-key")
         >>> async_client = create_mistral_client(api_key="your-key", async_client=True)
     """
-    from mistralai import Mistral
+    from mistralai import Mistral  # Optional dependency, only required for Mistral API
 
     resolved_api_key = api_key or os.environ.get("MISTRAL_API_KEY")
     if not resolved_api_key:
@@ -144,6 +176,9 @@ def create_mistral_client(
         )
 
     mistral_client = Mistral(api_key=resolved_api_key, server_url=server_url, **kwargs)
+
+    # Tag provider as 'mistralai'
+    setattr(mistral_client, "_llm_provider", "mistralai")
 
     # Create adapter class that maps OpenAI API to Mistral API
     class CompletionsAdapter:
@@ -185,7 +220,7 @@ def completion(
     system_prompt: Optional[str] = None,
     temperature: float = 0.7,
     response_model: Optional[type[T]] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> str | T:
     """Simple prompt completion.
 
@@ -210,11 +245,13 @@ def completion(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    _log_chat_request(model=model, temperature=temperature, messages=messages)
+    _log_chat_request(
+        model=model, temperature=temperature, messages=messages, stream=False
+    )
 
     msg_params = cast(list[ChatCompletionMessageParam], messages)
-
     start_time = time.time()
+
     if response_model:
         response = client.chat.completions.create(
             model=model,
@@ -223,12 +260,7 @@ def completion(
             response_format=_build_response_format(response_model),
             **kwargs,
         )
-        result = response_model.model_validate_json(response.choices[0].message.content)
-        duration = time.time() - start_time
-        _log_chat_response(
-            model=model, content_len=len(str(result)), duration_s=duration
-        )
-        return result
+        return _process_structured_response(response, response_model, model, start_time)
     else:
         response = client.chat.completions.create(
             model=model,
@@ -236,10 +268,7 @@ def completion(
             temperature=temperature,
             **kwargs,
         )
-        content = response.choices[0].message.content or ""
-        duration = time.time() - start_time
-        _log_chat_response(model=model, content_len=len(content), duration_s=duration)
-        return content
+        return _process_text_response(response, model, start_time)
 
 
 async def async_completion(
@@ -249,7 +278,7 @@ async def async_completion(
     system_prompt: Optional[str] = None,
     temperature: float = 0.7,
     response_model: Optional[type[T]] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> str | T:
     """Async version of completion.
 
@@ -270,11 +299,13 @@ async def async_completion(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    _log_chat_request(model=model, temperature=temperature, messages=messages)
+    _log_chat_request(
+        model=model, temperature=temperature, messages=messages, stream=False
+    )
 
     msg_params = cast(list[ChatCompletionMessageParam], messages)
-
     start_time = time.time()
+
     if response_model:
         response = await client.chat.completions.create(
             model=model,
@@ -283,12 +314,7 @@ async def async_completion(
             response_format=_build_response_format(response_model),
             **kwargs,
         )
-        result = response_model.model_validate_json(response.choices[0].message.content)
-        duration = time.time() - start_time
-        _log_chat_response(
-            model=model, content_len=len(str(result)), duration_s=duration
-        )
-        return result
+        return _process_structured_response(response, response_model, model, start_time)
     else:
         response = await client.chat.completions.create(
             model=model,
@@ -296,10 +322,7 @@ async def async_completion(
             temperature=temperature,
             **kwargs,
         )
-        content = response.choices[0].message.content or ""
-        duration = time.time() - start_time
-        _log_chat_response(model=model, content_len=len(content), duration_s=duration)
-        return content
+        return _process_text_response(response, model, start_time)
 
 
 def chat_completion(
@@ -308,7 +331,7 @@ def chat_completion(
     messages: list[dict[str, Any]],
     temperature: float = 0.7,
     response_model: Optional[type[T]] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> str | T:
     """Chat completion with message history.
 
@@ -327,11 +350,13 @@ def chat_completion(
         >>> messages = [{"role": "user", "content": "Hello"}]
         >>> response = chat_completion(client, "llama3.2:1b", messages)
     """
-    _log_chat_request(model=model, temperature=temperature, messages=messages)
+    _log_chat_request(
+        model=model, temperature=temperature, messages=messages, stream=False
+    )
 
     msg_params = cast(list[ChatCompletionMessageParam], messages)
-
     start_time = time.time()
+
     if response_model:
         response = client.chat.completions.create(
             model=model,
@@ -340,12 +365,7 @@ def chat_completion(
             response_format=_build_response_format(response_model),
             **kwargs,
         )
-        result = response_model.model_validate_json(response.choices[0].message.content)
-        duration = time.time() - start_time
-        _log_chat_response(
-            model=model, content_len=len(str(result)), duration_s=duration
-        )
-        return result
+        return _process_structured_response(response, response_model, model, start_time)
     else:
         response = client.chat.completions.create(
             model=model,
@@ -353,10 +373,7 @@ def chat_completion(
             temperature=temperature,
             **kwargs,
         )
-        content = response.choices[0].message.content or ""
-        duration = time.time() - start_time
-        _log_chat_response(model=model, content_len=len(content), duration_s=duration)
-        return content
+        return _process_text_response(response, model, start_time)
 
 
 async def async_chat_completion(
@@ -365,7 +382,7 @@ async def async_chat_completion(
     messages: list[dict[str, Any]],
     temperature: float = 0.7,
     response_model: Optional[type[T]] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> str | T:
     """Async version of chat_completion.
 
@@ -380,11 +397,13 @@ async def async_chat_completion(
     Returns:
         str if no response_model, otherwise instance of response_model
     """
-    _log_chat_request(model=model, temperature=temperature, messages=messages)
+    _log_chat_request(
+        model=model, temperature=temperature, messages=messages, stream=False
+    )
 
     msg_params = cast(list[ChatCompletionMessageParam], messages)
-
     start_time = time.time()
+
     if response_model:
         response = await client.chat.completions.create(
             model=model,
@@ -393,12 +412,7 @@ async def async_chat_completion(
             response_format=_build_response_format(response_model),
             **kwargs,
         )
-        result = response_model.model_validate_json(response.choices[0].message.content)
-        duration = time.time() - start_time
-        _log_chat_response(
-            model=model, content_len=len(str(result)), duration_s=duration
-        )
-        return result
+        return _process_structured_response(response, response_model, model, start_time)
     else:
         response = await client.chat.completions.create(
             model=model,
@@ -406,10 +420,7 @@ async def async_chat_completion(
             temperature=temperature,
             **kwargs,
         )
-        content = response.choices[0].message.content or ""
-        duration = time.time() - start_time
-        _log_chat_response(model=model, content_len=len(content), duration_s=duration)
-        return content
+        return _process_text_response(response, model, start_time)
 
 
 def stream_completion(
@@ -417,7 +428,7 @@ def stream_completion(
     model: str,
     messages: list[dict[str, Any]],
     temperature: float = 0.7,
-    **kwargs,
+    **kwargs: Any,
 ) -> Iterator[str | ChatCompletion]:
     """Stream text chunks from completion, then yield final ChatCompletion.
 
@@ -435,10 +446,20 @@ def stream_completion(
         >>> for chunk in stream_completion(client, "llama3.2:1b", [{"role": "user", "content": "Hi"}]):
         ...     print(chunk, end="", flush=True)
     """
-    _log_chat_request(model=model, temperature=temperature, messages=messages)
+    _log_chat_request(
+        model=model, temperature=temperature, messages=messages, stream=True
+    )
     start_time = time.time()
 
     msg_params = cast(list[ChatCompletionMessageParam], messages)
+
+    # Set stream_options to include usage if not Mistral and not already set
+    if (
+        getattr(client, "_llm_provider", None) != "mistralai"
+        and "stream_options" not in kwargs
+    ):
+        kwargs["stream_options"] = {"include_usage": True}
+
     stream = client.chat.completions.create(
         model=model,
         messages=msg_params,
@@ -447,31 +468,51 @@ def stream_completion(
         **kwargs,
     )
 
-    duration = time.time() - start_time
-    logger.debug(
-        "LLM stream started in %.4f s, model=%s temperature=%s",
-        duration,
-        model,
-        temperature,
-    )
-
     content_chunks: list[str] = []
-    finish_reason = "stop"
+    finish_reason: FinishReason = "stop"
+    usage = None
 
     for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-            piece = chunk.choices[0].delta.content
+        # Normalize shape:
+        # - OpenAI/Ollama: chunk has .choices/.usage
+        # - Mistral: event.data has .choices/.usage
+        data = getattr(chunk, "data", chunk)
+
+        chunk_usage = getattr(data, "usage", None)
+        if chunk_usage is not None:
+            usage = chunk_usage
+
+        choices = getattr(data, "choices", None)
+        if not choices:
+            # OpenAI stream_options include_usage emits a final usage-only chunk with choices=[]
+            continue
+
+        choice0 = choices[0]
+        piece = choice0.delta.content
+        if piece:
             content_chunks.append(piece)
             yield piece
-        if chunk.choices and chunk.choices[0].finish_reason:
-            finish_reason = chunk.choices[0].finish_reason
+
+        if choice0.finish_reason:
+            finish_reason = cast(FinishReason, choice0.finish_reason)
 
     full_content = "".join(content_chunks)
+    duration = time.time() - start_time
+    _log_chat_response(model=model, duration_s=duration, stream=True, usage=usage)
     yield ChatCompletion(
         id=f"chatcmpl-{model}-{datetime.now().timestamp()}",
         object="chat.completion",
         created=int(datetime.now().timestamp()),
         model=model,
+        usage=(
+            CompletionUsage(
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                total_tokens=usage.total_tokens,
+            )
+            if usage
+            else None
+        ),
         choices=[
             Choice(
                 index=0,
@@ -487,7 +528,7 @@ async def async_stream_completion(
     model: str,
     messages: list[dict[str, Any]],
     temperature: float = 0.7,
-    **kwargs,
+    **kwargs: Any,
 ) -> AsyncIterator[str | ChatCompletion]:
     """Async version of stream_completion.
 
@@ -505,10 +546,20 @@ async def async_stream_completion(
         >>> async for chunk in async_stream_completion(client, "llama3.2:1b", [{"role": "user", "content": "Hi"}]):
         ...     print(chunk, end="", flush=True)
     """
-    _log_chat_request(model=model, temperature=temperature, messages=messages)
+    _log_chat_request(
+        model=model, temperature=temperature, messages=messages, stream=True
+    )
     start_time = time.time()
 
     msg_params = cast(list[ChatCompletionMessageParam], messages)
+
+    # Set stream_options to include usage if not Mistral and not already set
+    if (
+        getattr(client, "_llm_provider", None) != "mistralai"
+        and "stream_options" not in kwargs
+    ):
+        kwargs["stream_options"] = {"include_usage": True}
+
     stream = await client.chat.completions.create(
         model=model,
         messages=msg_params,
@@ -517,31 +568,51 @@ async def async_stream_completion(
         **kwargs,
     )
 
-    duration = time.time() - start_time
-    logger.debug(
-        "LLM stream started in %.4f s, model=%s temperature=%s",
-        duration,
-        model,
-        temperature,
-    )
-
     content_chunks: list[str] = []
-    finish_reason = "stop"
+    finish_reason: FinishReason = "stop"
+    usage = None
 
     async for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-            piece = chunk.choices[0].delta.content
+        # Normalize shape:
+        # - OpenAI/Ollama: chunk has .choices/.usage
+        # - Mistral: event.data has .choices/.usage
+        data = getattr(chunk, "data", chunk)
+
+        chunk_usage = getattr(data, "usage", None)
+        if chunk_usage is not None:
+            usage = chunk_usage
+
+        choices = getattr(data, "choices", None)
+        if not choices:
+            # OpenAI stream_options include_usage emits a final usage-only chunk with choices=[]
+            continue
+
+        choice0 = choices[0]
+        piece = choice0.delta.content
+        if piece:
             content_chunks.append(piece)
             yield piece
-        if chunk.choices and chunk.choices[0].finish_reason:
-            finish_reason = chunk.choices[0].finish_reason
+
+        if choice0.finish_reason:
+            finish_reason = cast(FinishReason, choice0.finish_reason)
 
     full_content = "".join(content_chunks)
+    duration = time.time() - start_time
+    _log_chat_response(model=model, duration_s=duration, stream=True, usage=usage)
     yield ChatCompletion(
         id=f"chatcmpl-{model}-{datetime.now().timestamp()}",
         object="chat.completion",
         created=int(datetime.now().timestamp()),
         model=model,
+        usage=(
+            CompletionUsage(
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                total_tokens=usage.total_tokens,
+            )
+            if usage
+            else None
+        ),
         choices=[
             Choice(
                 index=0,
@@ -552,7 +623,80 @@ async def async_stream_completion(
     )
 
 
-async def mock_chat_completion(
+async def list_models(
+    client: AsyncOpenAI,
+    base_url: str = "http://localhost:11434",
+    include_capabilities: bool = False,
+) -> list[str] | list[dict[str, Any]]:
+    """Async version of list_models.
+
+    Args:
+        client: AsyncOpenAI client
+        base_url: Base URL for capability detection (Ollama only)
+        include_capabilities: If True, fetch Ollama-specific capabilities
+
+    Returns:
+        list[str] of model names, or list[dict] with capabilities if include_capabilities=True
+
+    Raises:
+        NotImplementedError: If include_capabilities=True for non-Ollama providers
+
+    Example:
+        >>> models = await list_models(client)
+        ['llama3.2:1b', 'mistral:latest']
+        >>> models = await list_models(client, include_capabilities=True)
+        [{'name': 'llama3.2:1b', 'capabilities': ['completion']}, ...]
+    """
+    import httpx  # Optional dependency, only required for capability detection
+
+    start_time = time.time()
+    models = await client.models.list()
+    model_names = [model.id for model in models.data]
+
+    if not include_capabilities:
+        duration = time.time() - start_time
+        logger.debug(
+            f"Model list retrieved in {duration:.1f}s, count={len(model_names)}"
+        )
+        return model_names
+
+    # Ollama capability detection
+    import asyncio  # Stdlib, for parallel async requests
+
+    ollama_api_url = f"{base_url.rstrip('/')}/api/show"
+
+    async def fetch_model_capabilities(
+        model_name: str, http_client: httpx.AsyncClient
+    ) -> dict[str, Any]:
+        try:
+            response = await http_client.post(
+                ollama_api_url,
+                json={"name": model_name},
+            )
+            response.raise_for_status()
+            model_info = response.json()
+            capabilities = model_info.get("capabilities", [])
+            return {"name": model_name, "capabilities": capabilities}
+        except (httpx.HTTPError, httpx.ConnectError) as e:
+            # Not Ollama or capability detection not supported
+            raise NotImplementedError(
+                f"Capability detection not supported for this provider: {e}"
+            ) from e
+
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        models_info = await asyncio.gather(
+            *[
+                fetch_model_capabilities(model_name, http_client)
+                for model_name in model_names
+            ]
+        )
+
+    duration = time.time() - start_time
+    logger.debug(f"Model list retrieved in {duration:.1f}s, count={len(model_names)}")
+    return list(models_info)
+
+
+def mock_chat_completion(
     *,
     messages: list[dict[str, Any]],
     model: str = "mock-llm",
@@ -584,7 +728,6 @@ async def mock_chat_completion(
         user_message,
         "This is a mock response.",
         f"This is a mock response from {model} with temperature {temperature}.",
-        f"Let me think about '{user_message}'...",
     ]
 
     if response_type is None:
@@ -650,25 +793,59 @@ def _build_response_format(response_model: type[BaseModel]) -> ResponseFormatJSO
     )
 
 
+def _process_structured_response(
+    response: ChatCompletion,
+    response_model: type[T],
+    model: str,
+    start_time: float,
+) -> T:
+    """Process a structured response with a Pydantic model."""
+    result = response_model.model_validate_json(response.choices[0].message.content)  # type: ignore
+    duration = time.time() - start_time
+    _log_chat_response(
+        model=model,
+        duration_s=duration,
+        stream=False,
+        usage=response.usage,
+    )
+    return result
+
+
+def _process_text_response(
+    response: ChatCompletion,
+    model: str,
+    start_time: float,
+) -> str:
+    """Process a text response."""
+    content = response.choices[0].message.content or ""
+    duration = time.time() - start_time
+    _log_chat_response(
+        model=model,
+        duration_s=duration,
+        stream=False,
+        usage=response.usage,
+    )
+    return content
+
+
 def _log_chat_request(
-    *, model: str, temperature: float, messages: list[dict[str, Any]]
+    *, model: str, temperature: float, messages: list[dict[str, Any]], stream: bool
 ) -> None:
     """Log chat request details."""
     logger.debug(
-        "LLM request: model=%s temperature=%s messages=%s",
-        model,
-        temperature,
-        len(messages),
+        f"LLM request: model={model}, temperature={temperature}, stream={stream}, messages={len(messages)}"
     )
 
 
-def _log_chat_response(*, model: str, content_len: int, duration_s: float) -> None:
+def _log_chat_response(
+    *, model: str, duration_s: float, stream: bool, usage=None
+) -> None:
     """Log chat response details."""
+    usage_str = ""
+    if usage:
+        usage_str = f", tokens={{prompt={usage.prompt_tokens}, completion={usage.completion_tokens}, total={usage.total_tokens}}}"
     logger.debug(
-        "LLM response: model=%s content_len=%s duration_s=%.4f",
-        model,
-        content_len,
-        duration_s,
+        f"LLM response in {duration_s:.2f}s, model={model}, stream={stream}{usage_str}"
     )
 
 
